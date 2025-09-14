@@ -45,7 +45,7 @@ describe('VideoUpload', () => {
     
     expect(screen.getByText(/Drop video files here/)).toBeInTheDocument();
     expect(screen.getByText(/browse to upload/)).toBeInTheDocument();
-    expect(screen.getByText(/MP4, MOV, AVI, WebM up to 1GB/)).toBeInTheDocument();
+    expect(screen.getByText(/MP4, MOV, AVI, WebM up to 50GB/)).toBeInTheDocument();
   });
 
   it('should handle file selection via button', async () => {

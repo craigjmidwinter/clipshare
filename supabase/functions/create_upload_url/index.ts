@@ -89,11 +89,11 @@ serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    // Validate file size (1GB limit)
-    const maxFileSize = 1024 * 1024 * 1024; // 1GB
+    // Validate file size (50GB limit - leverages S3/MinIO with resumable uploads)
+    const maxFileSize = 50 * 1024 * 1024 * 1024; // 50GB
     if (fileSize > maxFileSize) {
       return new Response(JSON.stringify({ 
-        error: 'File size exceeds 1GB limit' 
+        error: 'File size exceeds 50GB limit' 
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },

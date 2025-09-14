@@ -139,7 +139,7 @@ export function VideoUpload({ showId, onUploadComplete, onUploadError }: VideoUp
               </span>
             </span>
             <span className="mt-1 block text-xs text-gray-500">
-              MP4, MOV, AVI, WebM up to 1GB
+              MP4, MOV, AVI, WebM up to 50GB
             </span>
           </label>
           <input

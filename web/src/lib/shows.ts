@@ -110,7 +110,7 @@ export async function getShowMembers(showId: string): Promise<Membership[]> {
       user_id,
       role,
       created_at,
-      profiles!inner (
+      profiles (
         display_name,
         avatar_url
       )
@@ -139,7 +139,7 @@ export async function getShowInvites(showId: string): Promise<Invite[]> {
       accepted_at,
       revoked_at,
       created_at,
-      profiles!inner (
+      profiles (
         display_name
       )
     `)

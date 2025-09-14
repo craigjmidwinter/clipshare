@@ -38,7 +38,33 @@
   - Success/error notifications for all actions
   - Empty states for new users (onboarding)
 
-#### 3) Upload long videos with progress
+#### 3) Welcome Wizard & Plex Onboarding
+- As a first-time user, I can complete a guided setup wizard that configures my Plex authentication and server connection.
+- Acceptance
+  - Multi-step wizard guides users through initial setup
+  - Step 1: Welcome screen explaining Clipshare's purpose and Plex integration
+  - Step 2: Plex authentication with clear benefits explanation
+  - Step 3: Plex server discovery and connection setup
+  - Step 4: Library selection and initial video import
+  - Step 5: Create first show and invite collaborators
+  - Wizard can be skipped but recommended for optimal experience
+  - Progress saved between steps; users can return to complete later
+- UI Requirements
+  - Full-screen wizard overlay with progress indicator
+  - Step-by-step navigation with back/next buttons
+  - Clear explanations of each step's purpose and benefits
+  - Plex server auto-discovery with manual fallback option
+  - Visual library browser with preview thumbnails
+  - Bulk video selection with search and filter capabilities
+  - Show creation form integrated into wizard flow
+  - Skip option with "Complete Setup Later" button
+  - Success celebration screen upon completion
+  - Responsive design optimized for desktop (primary use case)
+  - Accessibility: keyboard navigation, screen reader support, proper ARIA labels
+  - Loading states and error handling throughout wizard steps
+  - Help tooltips and contextual guidance for complex steps
+
+#### 4) Upload long videos with progress
 - As a Producer, I can upload large video files with resumable progress.
 - Acceptance
   - Direct to Supabase Storage with chunked/resumable upload and a progress UI
@@ -54,7 +80,7 @@
   - Retry mechanism for failed uploads
   - File size limits and format validation with clear error messages
 
-#### 4) Secure full-video link for collaborators
+#### 5) Secure full-video link for collaborators
 - As a Producer, I can generate a secure link to the full video for collaborators.
 - Acceptance
   - Signed/expiring link with token, expiry, optional single-use limit
@@ -67,7 +93,49 @@
   - Link usage statistics (views, remaining uses)
   - QR code generation for easy sharing
 
-#### 5) Video viewer with in/out bookmarking
+#### 6) Plex Authentication Integration
+- As a user, I can sign in using my existing Plex account instead of creating a new Clipshare account.
+- Acceptance
+  - Plex OAuth integration using Plex's official authentication flow
+  - On login, user profile is created/updated with Plex username, email, and avatar
+  - Session persists across refresh; logout clears both Clipshare and Plex sessions
+  - Users can link/unlink Plex accounts from existing Clipshare accounts
+  - Fallback to traditional auth methods if Plex authentication fails
+- UI Requirements
+  - Plex-branded login button with official Plex logo and colors
+  - OAuth flow with clear permission scopes explanation
+  - Account linking interface for existing users
+  - Profile sync status indicator showing Plex account connection
+  - Account management settings with unlink Plex option
+  - Error handling for Plex service unavailability
+  - Loading states during Plex authentication process
+  - Responsive design matching existing login page layout
+  - Accessibility: keyboard navigation, screen reader support, proper ARIA labels
+  - Clear messaging about data sharing between Clipshare and Plex
+
+#### 7) Plex Media Server Integration
+- As a Producer, I can connect my Plex server to import videos instead of uploading files.
+- Acceptance
+  - Connect to Plex server via server URL and authentication token
+  - Browse and select videos from Plex libraries (Movies, TV Shows, Home Videos)
+  - Import selected videos with metadata (title, duration, poster, description)
+  - Videos stream directly from Plex server via signed URLs; no local storage required
+  - Sync status tracking: connected, syncing, synced, error
+  - Automatic refresh of available content when Plex library changes
+- UI Requirements
+  - Plex connection setup wizard with server discovery
+  - Server configuration form (URL, token, library selection)
+  - Connection status indicator with health check and last sync time
+  - Plex library browser with search, filter, and grid/list view options
+  - Video selection interface with bulk select and preview capabilities
+  - Import progress tracking with individual video status indicators
+  - Plex metadata display (poster, title, year, duration, description)
+  - Connection troubleshooting with error messages and retry options
+  - Settings panel for managing Plex connections and sync preferences
+  - Visual indicators distinguishing Plex-sourced vs uploaded videos
+  - Responsive design optimized for browsing large media libraries
+
+#### 8) Video viewer with in/out bookmarking
 - As a collaborator, I can set in/out points and save bookmarks with label + notes.
 - Acceptance
   - Player UI and hotkeys to set in/out, shows timecodes
@@ -84,7 +152,7 @@
   - Playback speed controls and fullscreen support
   - Accessibility: keyboard navigation, screen reader announcements
 
-#### 6) Public clip links (no auth required)
+#### 9) Public clip links (no auth required)
 - As a collaborator, I can share a public link that plays only the bookmarked section.
 - Acceptance
   - Each bookmark gets an unguessable `public_slug`
@@ -99,7 +167,7 @@
   - Mobile-optimized responsive design
   - Loading states and error handling for revoked/invalid clips
 
-#### 7) Clip export for post-production
+#### 10) Clip export for post-production
 - As a Producer, I can export clips (single or batch) as video files.
 - Acceptance
   - Export triggers background job(s); progress/state visible in UI
@@ -113,7 +181,7 @@
   - Email notifications for completed exports
   - Export history with re-download capabilities
 
-#### 8) Multiple videos per show
+#### 11) Multiple videos per show
 - As a Producer, I can attach multiple videos to a show.
 - Acceptance
   - Show detail lists all videos with status/metadata
@@ -126,7 +194,7 @@
   - Video status indicators and processing progress
   - Sort options (date, name, duration, status)
 
-#### 9) Permissions and revocation
+#### 12) Permissions and revocation
 - As a Producer, I can control access to videos and links.
 - Acceptance
   - RLS ensures only members access shows/videos/bookmarks
@@ -145,28 +213,32 @@
 #### Frontend (Next.js + TypeScript + Tailwind)
 - App Router pages
   - `/login`, `/invite/:token`
+  - `/welcome` (onboarding wizard for first-time users)
   - `/app` (dashboard: shows, invited shows, recent videos)
   - `/show/:showId`
   - `/video/:videoId`
   - `/clip/:slug` (public)
 - Player: HLS-first; keyboard shortcuts; bookmarks side panel; share/export modals
+- Welcome Wizard: Multi-step onboarding with Plex integration
 
 #### Supabase
-- Auth: Google, Facebook, Magic Link
+- Auth: Google, Facebook, Magic Link, Plex OAuth
 - Storage buckets
   - `videos` (private originals and renditions)
   - `thumbnails` (poster frames; private with signed access)
   - `clips-public` (public exported clips; randomized filenames)
   - `exports` (private batch zips)
 - Database tables
-  - `profiles` (user_id, display_name, avatar_url)
+  - `profiles` (user_id, display_name, avatar_url, plex_user_id, plex_username, plex_email, plex_avatar_url, onboarding_completed)
   - `shows` (id, owner_id, name, description)
   - `memberships` (show_id, user_id, role: producer|collaborator)
-  - `videos` (id, show_id, title, storage_path, duration_ms, width, height, status, poster_path, created_by)
+  - `videos` (id, show_id, title, storage_path, duration_ms, width, height, status, poster_path, created_by, plex_key, plex_server_id, source_type: uploaded|plex)
   - `bookmarks` (id, video_id, created_by, label, notes, start_ms, end_ms, public_slug, is_public_revoked)
   - `secure_links` (id, video_id, token, expires_at, max_uses, use_count, revoked_at)
   - `invites` (id, show_id, email, token, invited_by, accepted_at, revoked_at)
   - `processing_jobs` (id, type, status, payload_json, error_text)
+  - `plex_servers` (id, user_id, server_url, token, name, last_sync_at, status)
+  - `onboarding_sessions` (id, user_id, current_step, completed_steps, wizard_data_json, created_at, updated_at)
 - RLS policy highlights
   - `shows`: owner read/write; members read
   - `memberships`: producer manage; members read self
@@ -183,6 +255,11 @@
 - `resolve_public_clip` → slug to clip payload (no auth)
 - `request_clip_export` → enqueue export jobs
 - `accept_invite` → token to membership
+- `wizard_progress` → save/load onboarding wizard progress
+- `plex_auth_callback` → handle Plex OAuth callback and create/update profile
+- `plex_connect` → validate Plex server connection and fetch libraries
+- `plex_sync` → import selected videos from Plex with metadata
+- `plex_stream_url` → generate signed streaming URLs for Plex videos
 
 ### UI/UX Design Guidelines
 
@@ -220,8 +297,10 @@
 - Observability: structured logs, job status UI, basic open/download counts
 
 ### MVP Definition of Done
-- Users can auth via Google, Facebook, and magic link
+- Users can auth via Google, Facebook, magic link, and Plex OAuth
+- First-time users complete guided welcome wizard with Plex setup
 - Producer can create shows, invite collaborators, upload videos, share secure links
+- Producer can connect to Plex servers and import videos with metadata
 - Collaborators can create bookmarks and share public clip links viewable without auth
 - Producer can export and download clips
 - RLS policies restrict access appropriately; revocation supported for links/clips

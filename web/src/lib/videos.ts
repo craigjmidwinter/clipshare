@@ -193,10 +193,10 @@ export function validateVideoFile(file: File): string | null {
     return 'Unsupported file type. Please upload MP4, MOV, AVI, or WebM files.';
   }
 
-  // Check file size (1GB limit)
-  const maxSize = 1024 * 1024 * 1024; // 1GB
+  // Check file size (50GB limit - leverages S3/MinIO with resumable uploads)
+  const maxSize = 50 * 1024 * 1024 * 1024; // 50GB
   if (file.size > maxSize) {
-    return 'File size exceeds 1GB limit.';
+    return 'File size exceeds 50GB limit.';
   }
 
   return null;

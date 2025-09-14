@@ -89,10 +89,14 @@ describe('Video Service', () => {
     });
 
     it('should reject files that are too large', () => {
-      const largeFile = new File(['x'.repeat(1024 * 1024 * 1024 + 1)], 'large.mp4', { 
-        type: 'video/mp4' 
+      // Create a mock file that exceeds the 50GB limit
+      const largeFile = new File(['test'], 'large.mp4', { type: 'video/mp4' });
+      // Mock the size property
+      Object.defineProperty(largeFile, 'size', {
+        value: 50 * 1024 * 1024 * 1024 + 1, // 50GB + 1 byte
+        writable: false
       });
-      expect(validateVideoFile(largeFile)).toContain('File size exceeds 1GB limit');
+      expect(validateVideoFile(largeFile)).toContain('File size exceeds 50GB limit');
     });
   });
 
