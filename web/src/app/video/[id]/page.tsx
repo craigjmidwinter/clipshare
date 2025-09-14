@@ -11,7 +11,7 @@ export default async function VideoPage({ params }: Props) {
   const envReady = Boolean(supabaseUrl && supabaseAnon);
   if (!envReady) redirect('/login');
 
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

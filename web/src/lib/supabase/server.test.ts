@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const cookiesStore = new Map<string, string>();
-const cookiesMock = vi.fn(() => ({
+const cookiesMock = vi.fn(() => Promise.resolve({
   get: (name: string) => (cookiesStore.has(name) ? { value: cookiesStore.get(name)! } : undefined),
   set: ({ name, value }: { name: string; value: string }) => {
     if (value === '') cookiesStore.delete(name);
@@ -34,14 +34,14 @@ describe('getSupabaseServerClient', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const mod = await import('./server');
-    expect(() => mod.getSupabaseServerClient()).toThrowError(/Missing NEXT_PUBLIC_SUPABASE_URL/);
+    await expect(mod.getSupabaseServerClient()).rejects.toThrowError(/Missing NEXT_PUBLIC_SUPABASE_URL/);
   });
 
   it('creates server client and wires cookie adapters', async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
     const mod = await import('./server');
-    const client = mod.getSupabaseServerClient();
+    const client = await mod.getSupabaseServerClient();
     expect(client).toEqual({ kind: 'server-client' });
     expect(createServerClientMock).toHaveBeenCalled();
     // exercise cookie adapter behavior via the options passed to createServerClient

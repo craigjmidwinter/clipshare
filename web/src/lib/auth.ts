@@ -1,7 +1,7 @@
 import { getSupabaseServerClient } from './supabase/server';
 
 export async function requireUser() {
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -10,7 +10,7 @@ export async function requireUser() {
 
 
 export async function ensureProfile(): Promise<void> {
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
