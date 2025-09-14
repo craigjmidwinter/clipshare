@@ -1,8 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { VideoUpload } from '@/components/VideoUpload';
+import { VideoList } from '@/components/VideoList';
 import { getShowMembers, getShowInvites, revokeInvite, removeMember, Membership, Invite } from '@/lib/shows';
+import { Video } from '@/lib/videos';
 
 interface ShowManagementProps {
   showId: string;
@@ -11,10 +15,12 @@ interface ShowManagementProps {
 }
 
 export function ShowManagement({ showId, showName, isOwner }: ShowManagementProps) {
+  const router = useRouter();
   const [members, setMembers] = useState<Membership[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'videos' | 'members'>('videos');
 
   const loadData = async () => {
     try {
@@ -65,6 +71,19 @@ export function ShowManagement({ showId, showName, isOwner }: ShowManagementProp
     }
   };
 
+  const handleVideoSelect = (video: Video) => {
+    router.push(`/video/${video.id}`);
+  };
+
+  const handleUploadComplete = (videoId: string) => {
+    // Video upload completed, could show a success message or refresh the video list
+    console.log('Video upload completed:', videoId);
+  };
+
+  const handleUploadError = (error: string) => {
+    setError(error);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -87,79 +106,133 @@ export function ShowManagement({ showId, showName, isOwner }: ShowManagementProp
         </div>
       )}
 
-      {/* Members Section */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Members ({members.length})</h3>
-        {members.length === 0 ? (
-          <p className="text-gray-500 text-sm">No members yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {members.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                    {member.profiles?.display_name?.charAt(0).toUpperCase() || '?'}
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {member.profiles?.display_name || 'Unknown User'}
-                    </p>
-                    <p className="text-sm text-gray-500 capitalize">
-                      {member.role}
-                    </p>
-                  </div>
-                </div>
-                {isOwner && member.role !== 'producer' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRemoveMember(member.user_id, member.profiles?.display_name || 'this user')}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    Remove
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('videos')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'videos'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Videos
+          </button>
+          <button
+            onClick={() => setActiveTab('members')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'members'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Members
+          </button>
+        </nav>
       </div>
 
-      {/* Pending Invites Section */}
-      {isOwner && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Pending Invites ({invites.length})</h3>
-          {invites.length === 0 ? (
-            <p className="text-gray-500 text-sm">No pending invites.</p>
-          ) : (
-            <div className="space-y-2">
-              {invites.map((invite) => (
-                <div
-                  key={invite.id}
-                  className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{invite.email}</p>
-                    <p className="text-sm text-gray-500">
-                      Invited by {invite.profiles?.display_name || 'Unknown'}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(invite.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRevokeInvite(invite.id)}
-                    className="text-red-600 hover:text-red-700"
+      {/* Videos Tab */}
+      {activeTab === 'videos' && (
+        <div className="space-y-6">
+          {/* Upload Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Upload Videos</h3>
+            <VideoUpload
+              showId={showId}
+              onUploadComplete={handleUploadComplete}
+              onUploadError={handleUploadError}
+            />
+          </div>
+
+          {/* Videos List */}
+          <div>
+            <VideoList
+              showId={showId}
+              onVideoSelect={handleVideoSelect}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Members Tab */}
+      {activeTab === 'members' && (
+        <div className="space-y-6">
+          {/* Members Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Members ({members.length})</h3>
+            {members.length === 0 ? (
+              <p className="text-gray-500 text-sm">No members yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
-                    Revoke
-                  </Button>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                        {member.profiles?.display_name?.charAt(0).toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {member.profiles?.display_name || 'Unknown User'}
+                        </p>
+                        <p className="text-sm text-gray-500 capitalize">
+                          {member.role}
+                        </p>
+                      </div>
+                    </div>
+                    {isOwner && member.role !== 'producer' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRemoveMember(member.user_id, member.profiles?.display_name || 'this user')}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pending Invites Section */}
+          {isOwner && (
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Pending Invites ({invites.length})</h3>
+              {invites.length === 0 ? (
+                <p className="text-gray-500 text-sm">No pending invites.</p>
+              ) : (
+                <div className="space-y-2">
+                  {invites.map((invite) => (
+                    <div
+                      key={invite.id}
+                      className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg"
+                    >
+                      <div>
+                        <p className="font-medium">{invite.email}</p>
+                        <p className="text-sm text-gray-500">
+                          Invited by {invite.profiles?.display_name || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(invite.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRevokeInvite(invite.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Revoke
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>

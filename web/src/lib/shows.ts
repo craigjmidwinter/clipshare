@@ -54,11 +54,18 @@ export interface SendInviteData {
 export async function createShow(data: CreateShowData): Promise<Show> {
   const supabase = getSupabaseBrowserClient();
   
+  // Get the current user to set as owner
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('Not authenticated');
+  }
+  
   const { data: show, error } = await supabase
     .from('shows')
     .insert({
       name: data.name,
       description: data.description || null,
+      owner_id: user.id, // Explicitly set the owner
     })
     .select()
     .single();

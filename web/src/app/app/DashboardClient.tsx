@@ -21,56 +21,128 @@ export function DashboardClient() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedShow, setSelectedShow] = useState<{ id: string; name: string } | null>(null);
   const [selectedShowId, setSelectedShowId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const supabase = getSupabaseBrowserClient();
 
   // Client-side profile creation
   const ensureProfile = async (user: any) => {
-    const fullName = (user.user_metadata?.full_name as string | undefined)
-      ?? (user.user_metadata?.name as string | undefined)
-      ?? user.email
-      ?? '';
-    const avatarUrl = (user.user_metadata?.avatar_url as string | undefined)
-      ?? (user.user_metadata?.picture as string | undefined)
-      ?? null;
+    try {
+      const fullName = (user.user_metadata?.full_name as string | undefined)
+        ?? (user.user_metadata?.name as string | undefined)
+        ?? user.email
+        ?? '';
+      const avatarUrl = (user.user_metadata?.avatar_url as string | undefined)
+        ?? (user.user_metadata?.picture as string | undefined)
+        ?? null;
 
-    await supabase
-      .from('profiles')
-      .upsert({
-        user_id: user.id,
-        display_name: fullName,
-        avatar_url: avatarUrl,
-        updated_at: new Date().toISOString(),
-      });
+      console.log('Creating/updating profile for user:', user.id);
+      
+      // Add a timeout to prevent hanging
+      const profilePromise = supabase
+        .from('profiles')
+        .upsert({
+          user_id: user.id,
+          display_name: fullName,
+          avatar_url: avatarUrl,
+          updated_at: new Date().toISOString(),
+        });
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile creation timeout')), 5000)
+      );
+
+      const { error } = await Promise.race([profilePromise, timeoutPromise]) as any;
+
+      if (error) {
+        console.error('Profile creation error:', error);
+        // Don't throw error, just log it and continue
+        console.log('Continuing despite profile error...');
+      } else {
+        console.log('Profile created/updated successfully for user:', user.id);
+      }
+    } catch (error) {
+      console.error('Error in ensureProfile:', error);
+      // Don't throw error, just log it and continue
+      console.log('Continuing despite profile error...');
+    }
   };
 
   // Check authentication on component mount
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      try {
+        // First try to get the current session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          console.log('Found existing session for user:', session.user.id);
+          setUser(session.user);
+          console.log('User state set from session:', session.user.id);
+          
+          // Create profile in background (don't await)
+          ensureProfile(session.user).catch(error => {
+            console.error('Background profile creation error:', error);
+          });
+          return;
+        }
+        
+        // If no session, try to get user directly
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          console.log('Found user:', user.id);
+          setUser(user);
+          console.log('User state set from getUser:', user.id);
+          
+          // Create profile in background (don't await)
+          ensureProfile(user).catch(error => {
+            console.error('Background profile creation error:', error);
+          });
+        } else {
+          console.log('No user found, redirecting to login');
+          router.push('/login');
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
         router.push('/login');
-        return;
+      } finally {
+        setAuthChecked(true);
       }
-      
-      // Ensure profile exists for the user
-      await ensureProfile(user);
-      setUser(user);
     };
 
     checkAuth();
 
+    // Add a timeout to handle cases where auth state change might not fire
+    const timeoutId = setTimeout(() => {
+      if (!authChecked) {
+        console.log('Auth check timeout, checking again...');
+        checkAuth();
+      }
+    }, 2000);
+
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session?.user?.id);
+      
       if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
         router.push('/login');
       } else if (session?.user) {
-        await ensureProfile(session.user);
+        // Set user immediately, then create profile in background
         setUser(session.user);
+        console.log('User state set from auth state change:', session.user.id);
+        
+        // Create profile in background (don't await)
+        ensureProfile(session.user).catch(error => {
+          console.error('Background profile creation error:', error);
+        });
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, [router, supabase.auth]);
 
   const loadShows = async () => {
@@ -186,14 +258,33 @@ export function DashboardClient() {
     );
   }
 
+  // Debug logging
+  console.log('DashboardClient render - user:', user?.id, 'authChecked:', authChecked);
+
   // Show loading state while checking authentication
-  if (!user) {
+  if (!user && !authChecked) {
+    console.log('Showing authenticating state');
     return (
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Loading...</p>
+            <p className="mt-2 text-gray-600">Authenticating...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If auth is checked but no user, show a brief loading state before redirect
+  if (!user && authChecked) {
+    console.log('Showing redirecting state');
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+            <p className="mt-2 text-gray-600">Redirecting to login...</p>
           </div>
         </div>
       </div>
