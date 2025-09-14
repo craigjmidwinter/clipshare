@@ -205,12 +205,15 @@ export function DashboardClient() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-4">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-          <div className="space-y-4">
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 rounded-xl w-1/4"></div>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-48 bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 rounded-2xl"></div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -221,39 +224,51 @@ export function DashboardClient() {
     const show = shows.find(s => s.id === selectedShowId);
     if (!show) {
       return (
-        <div className="p-6">
-          <Button onClick={handleBackToDashboard} variant="outline">
-            ← Back to Dashboard
-          </Button>
-          <p className="mt-4 text-red-600">Show not found</p>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="glass rounded-2xl p-8 shadow-modern-xl">
+              <Button onClick={handleBackToDashboard} variant="outline" className="hover-lift">
+                ← Back to Dashboard
+              </Button>
+              <div className="mt-6 p-6 rounded-xl bg-destructive/5 border-2 border-destructive/20">
+                <p className="text-destructive font-semibold">Show not found</p>
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
 
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Button onClick={handleBackToDashboard} variant="outline">
-              ← Back to Dashboard
-            </Button>
-            <h1 className="text-2xl font-semibold mt-4">{show.name}</h1>
-            {show.description && (
-              <p className="text-gray-600 mt-1">{show.description}</p>
-            )}
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="glass rounded-2xl p-8 shadow-modern-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <Button onClick={handleBackToDashboard} variant="outline" className="hover-lift mb-4">
+                  ← Back to Dashboard
+                </Button>
+                <h1 className="text-3xl font-bold text-foreground mb-2">{show.name}</h1>
+                {show.description && (
+                  <p className="text-muted-foreground text-lg">{show.description}</p>
+                )}
+              </div>
+              {show.owner_id === user.id && (
+                <Button onClick={() => handleInviteClick(show.id, show.name)} variant="gradient" className="hover-lift">
+                  Invite Collaborator
+                </Button>
+              )}
+            </div>
           </div>
-          {show.owner_id === user.id && (
-            <Button onClick={() => handleInviteClick(show.id, show.name)}>
-              Invite Collaborator
-            </Button>
-          )}
-        </div>
 
-        <ShowManagement 
-          showId={show.id} 
-          showName={show.name} 
-          isOwner={show.owner_id === user.id}
-        />
+          <div className="glass rounded-2xl p-8 shadow-modern-xl">
+            <ShowManagement 
+              showId={show.id} 
+              showName={show.name} 
+              isOwner={show.owner_id === user.id}
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -265,12 +280,10 @@ export function DashboardClient() {
   if (!user && !authChecked) {
     console.log('Showing authenticating state');
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Authenticating...</p>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
+        <div className="glass rounded-2xl p-8 shadow-modern-xl text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground font-medium">Authenticating...</p>
         </div>
       </div>
     );
@@ -280,84 +293,98 @@ export function DashboardClient() {
   if (!user && authChecked) {
     console.log('Showing redirecting state');
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-2 text-gray-600">Redirecting to login...</p>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center">
+        <div className="glass rounded-2xl p-8 shadow-modern-xl text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground font-medium">Redirecting to login...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-gray-600">Welcome, {user.email}</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button onClick={() => setShowCreateModal(true)}>
-            Create Show
-          </Button>
-          <Button onClick={handleSignOut} variant="outline">
-            Sign out
-          </Button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">
-          {error}
-        </div>
-      )}
-
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Your Shows ({shows.length})</h2>
-        {shows.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No shows yet</h3>
-            <p className="mt-1 text-sm text-gray-500">Get started by creating your first show.</p>
-            <div className="mt-6">
-              <Button onClick={() => setShowCreateModal(true)}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="glass rounded-2xl p-8 shadow-modern-xl animate-fade-in-up">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-foreground mb-2">Dashboard</h1>
+              <p className="text-muted-foreground text-lg">Welcome back, {user.email}</p>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button onClick={() => setShowCreateModal(true)} variant="gradient" className="hover-lift btn-hover-scale">
                 Create Show
+              </Button>
+              <Button onClick={handleSignOut} variant="outline" className="hover-lift btn-hover-scale">
+                Sign out
               </Button>
             </div>
           </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {shows.map((show) => (
-              <ShowCard
-                key={show.id}
-                show={show}
-                memberCount={showMembers[show.id] || 0}
-                isOwner={show.owner_id === user.id}
-                onShowClick={handleShowClick}
-                onInviteClick={handleInviteClick}
-              />
-            ))}
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="glass rounded-2xl p-6 shadow-modern-xl border-2 border-destructive/20 bg-destructive/5">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6 text-destructive flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <p className="text-destructive font-semibold">{error}</p>
+            </div>
           </div>
         )}
+
+        {/* Shows Section */}
+        <div className="glass rounded-2xl p-8 shadow-modern-xl animate-fade-in-up stagger-1">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-bold text-foreground">Your Shows ({shows.length})</h2>
+          </div>
+          
+          {shows.length === 0 ? (
+            <div className="text-center py-16 animate-fade-in-scale">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl mb-6 animate-pulse-glow">
+                <svg className="w-10 h-10 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No shows yet</h3>
+              <p className="text-muted-foreground mb-8">Get started by creating your first show.</p>
+              <Button onClick={() => setShowCreateModal(true)} variant="gradient" size="lg" className="hover-lift btn-hover-glow">
+                Create Show
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {shows.map((show, index) => (
+                <div key={show.id} className={`animate-fade-in-up stagger-${Math.min(index + 1, 5)}`}>
+                  <ShowCard
+                    show={show}
+                    memberCount={showMembers[show.id] || 0}
+                    isOwner={show.owner_id === user.id}
+                    onShowClick={handleShowClick}
+                    onInviteClick={handleInviteClick}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <CreateShowModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onShowCreated={handleShowCreated}
+        />
+
+        <InviteCollaboratorModal
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          showId={selectedShow?.id || ''}
+          showName={selectedShow?.name || ''}
+          onInviteSent={handleInviteSent}
+        />
       </div>
-
-      <CreateShowModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onShowCreated={handleShowCreated}
-      />
-
-      <InviteCollaboratorModal
-        isOpen={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
-        showId={selectedShow?.id || ''}
-        showName={selectedShow?.name || ''}
-        onInviteSent={handleInviteSent}
-      />
     </div>
   );
 }
