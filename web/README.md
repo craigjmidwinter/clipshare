@@ -1,23 +1,8 @@
-This is the Clipshare web app (Next.js + TypeScript + Tailwind) using Supabase for Auth, DB, Storage, and Realtime.
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
-### Prerequisites
-
-- Node 18+
-- Supabase project with Auth providers enabled (Google, Facebook, Email)
-
-Set environment variables (copy `env.example` to `.env.local`):
-
-```
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-```
-
-### Dev server
-
-Run the development server:
+First, run the development server:
 
 ```bash
 npm run dev
@@ -31,16 +16,9 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `src/app/page.tsx`. The page auto-updates as you edit the file.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Project structure
-
-- `src/app` – App Router routes (`/login`, `/app`, `/clip/[slug]`)
-- `src/lib/supabase` – Supabase SSR/Browser clients
-- `src/components` – UI components
-- `supabase` – SQL schema and edge functions (to be added)
 
 ## Learn More
 

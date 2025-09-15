@@ -1,70 +1,136 @@
-## Local Development: Supabase + MinIO
+## Local Development: SQLite + NextAuth.js
 
-This project supports a local stack with Supabase (auth, database, storage API) and a standalone MinIO S3-compatible object store for assets.
+This project uses a local SQLite database with Prisma ORM and NextAuth.js for authentication, providing a simple development setup without external dependencies.
 
 ### Prerequisites
 
 - Node.js 20+
-- Docker Desktop (or compatible)
-- Supabase CLI (`brew install supabase/tap/supabase`)
+- npm or pnpm
 
 ### One-time setup
 
-1. Start services and web app:
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Set up environment variables:
+
+   ```bash
+   cp web/env.example web/.env.local
+   ```
+
+3. Configure your environment variables in `web/.env.local`:
+
+   ```bash
+   # Database
+   DATABASE_URL="file:./dev.db"
+
+   # NextAuth.js
+   NEXTAUTH_URL="http://localhost:3000"
+   NEXTAUTH_SECRET="your-secret-key-here"
+
+# Plex Configuration (PIN-based authentication - no client secret needed)
+# Client ID is pre-filled with a unique identifier (safe to commit to git)
+PLEX_CLIENT_ID="800c9d71-8ba6-4273-83a4-a71c6dfb3e85"
+
+   # Plex Server (optional - can be set via admin setup)
+   # Server token is sensitive - get from Plex server settings
+   PLEX_SERVER_URL="http://localhost:32400"
+   PLEX_SERVER_TOKEN="your-plex-server-token"
+   ```
+
+   **Getting Plex credentials:**
+   - **Server Token**: Get from your Plex server settings (Settings → Network → Plex Token). Keep this secret!
+   - **Client ID**: Automatically configured (no action needed)
+
+4. Set up the database:
+
+   ```bash
+   cd web
+   npx prisma db push
+   ```
+
+5. Start the development server:
 
    ```bash
    npm run dev
    ```
 
    This will:
-   - Launch MinIO at `http://localhost:9000` (console at `http://localhost:9001`, user `minioadmin` / `minioadmin`)
-   - Create an S3 bucket `clipshare` with public read
-   - Start Supabase local stack (Studio at `http://localhost:54323`)
-   - Sync Supabase env into `web/.env.local`
+   - Create SQLite database at `web/dev.db`
    - Start Next.js dev server at `http://localhost:3000`
-
-2. If you need to re-sync envs manually:
-
-   ```bash
-   npm run env:sync
-   ```
+   - Enable hot reloading for development
 
 ### Environment variables
 
-`web/.env.local` is generated from `supabase/.env` and includes:
+`web/.env.local` includes:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Database
+DATABASE_URL="file:./dev.db"
 
-S3_ENDPOINT=http://localhost:9000
-S3_REGION=us-east-1
-S3_BUCKET=clipshare
-S3_ACCESS_KEY_ID=minioadmin
-S3_SECRET_ACCESS_KEY=minioadmin
-S3_FORCE_PATH_STYLE=true
+# NextAuth.js
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key-here"
+
+# Plex Configuration (PIN-based authentication - no client secret needed)
+# Client ID is pre-filled with a unique identifier (safe to commit to git)
+PLEX_CLIENT_ID="800c9d71-8ba6-4273-83a4-a71c6dfb3e85"
+
+# Plex Server (optional - can be set via admin setup)
+# Server token is sensitive - get from Plex server settings
+PLEX_SERVER_URL="http://localhost:32400"
+PLEX_SERVER_TOKEN="your-plex-server-token"
 ```
 
-Update values if you change MinIO credentials or bucket policy.
+**Note**: Plex uses PIN-based authentication (no client secret needed). The Client ID is automatically configured, but the Server Token should be kept secret.
 
 ### Useful scripts
 
 ```bash
-# Start only MinIO
-npm run minio
+# Start development server
+npm run dev
 
-# Stop MinIO and remove containers
-npm run minio:down
+# Run database migrations
+npm run db:push
 
-# Start/stop Supabase local stack
-npm run supabase:start
-npm run supabase:stop
+# Open Prisma Studio (database GUI)
+npm run db:studio
+
+# Generate a Plex Client ID (UUID)
+npm run generate-client-id
+
+# Run tests
+npm run test
+
+# Run tests with coverage
+npm run test:coverage
 ```
+
+### Database management
+
+- **Database file**: `web/dev.db` (SQLite)
+- **Schema**: Defined in `web/prisma/schema.prisma`
+- **Migrations**: Use `npx prisma db push` for schema changes
+- **GUI**: Use `npx prisma studio` to browse data
+- **Reset**: Delete `web/dev.db` and run `npx prisma db push`
+
+### Development workflow
+
+1. **Schema changes**: Update `web/prisma/schema.prisma` and run `npx prisma db push`
+2. **API development**: Create routes in `web/src/app/api/`
+3. **Authentication**: Uses NextAuth.js with Plex PIN-based authentication
+4. **File storage**: Local filesystem for exported clips
+5. **Testing**: Vitest with React Testing Library for components
 
 ### Notes
 
-- Supabase local provides its own storage service. MinIO here is available if/when you add direct S3 integrations (uploads, signed URLs) from the app or edge functions.
-- For browser uploads to MinIO, use the S3_* vars and AWS SDK v3. Ensure CORS/bucket policy permits required operations.
+- SQLite provides a simple, file-based database perfect for development
+- No external services required (Docker, Supabase, etc.)
+- Plex integration requires valid Plex server credentials
+- Database is automatically created on first run
+- All data persists in the `web/dev.db` file
 
 

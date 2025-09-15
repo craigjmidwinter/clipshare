@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  name                  String?
+  email                 String?   @unique
+  emailVerified         DateTime?
+  image                 String?
+  plexUserId            String?   @unique
+  plexUsername          String?
+  plexEmail             String?
+  plexAvatarUrl         String?
+  onboardingCompleted   Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  accounts              Account[]
+  sessions              Session[]
+  workspaces            Workspace[]
+  memberships           Membership[]
+  bookmarks             Bookmark[]
+  plexServers           PlexServer[]
+  onboardingSessions    OnboardingSession[]
+  plexPins              PlexPin[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Workspace {
+  id              String   @id @default(cuid())
+  producerId      String
+  plexKey         String
+  plexServerId    String
+  title           String
+  description     String?
+  contentType     String   // "movie" or "episode"
+  contentTitle    String
+  contentPoster   String?
+  contentDuration Int      // duration in milliseconds
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  producer        User         @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  memberships     Membership[]
+  bookmarks       Bookmark[]
+}
+
+model Membership {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String   // "producer" or "collaborator"
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Bookmark {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  createdById     String
+  label           String?
+  publicNotes     String?
+  privateNotes    String?
+  startMs         Int      // start time in milliseconds
+  endMs           Int      // end time in milliseconds
+  publicSlug      String   @unique @default(cuid())
+  isPublicRevoked Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+}
+
+model ProcessingJob {
+  id          String   @id @default(cuid())
+  type        String   // "export_clip"
+  status      String   // "pending", "processing", "completed", "failed"
+  payloadJson String   // JSON payload for the job
+  errorText   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PlexServer {
+  id          String   @id @default(cuid())
+  userId      String
+  serverUrl   String
+  token       String
+  name        String
+  lastSyncAt  DateTime?
+  status      String   @default("active") // "active", "inactive", "error"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, serverUrl])
+}
+
+model PlexConfig {
+  id           String   @id @default(cuid())
+  clientId     String
+  serverUrl    String
+  serverToken  String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PlexPin {
+  id          String   @id @default(cuid())
+  pinId       String   @unique
+  pinCode     String
+  userId      String?
+  token       String?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OnboardingSession {
+  id              String   @id @default(cuid())
+  userId          String
+  currentStep     Int      @default(1)
+  completedSteps  String   // JSON array of completed step numbers
+  wizardDataJson  String?  // JSON data collected during wizard
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
