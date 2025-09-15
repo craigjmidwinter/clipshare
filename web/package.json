@@ -24,9 +24,11 @@
     "@types/axios": "^0.9.36",
     "@types/bcryptjs": "^2.4.6",
     "@types/uuid": "^10.0.0",
+    "@videojs/themes": "^1.0.1",
     "@vitejs/plugin-react": "^5.0.2",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
+    "hls.js": "^1.6.12",
     "jsdom": "^27.0.0",
     "nanoid": "^5.1.5",
     "next": "15.5.3",
@@ -35,6 +37,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "uuid": "^13.0.0",
+    "video.js": "^8.23.4",
     "vitest": "^3.2.4"
   },
   "devDependencies": {

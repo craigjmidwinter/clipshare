@@ -74,7 +74,71 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - Playback speed controls and fullscreen support
   - Accessibility: keyboard navigation, screen reader announcements
 
-### 4) Public Clip Sharing
+### 4) Advanced Bookmarking with In/Out Points & Producer Controls
+- As a Collaborator, I can set in/out points on the video timeline to create bookmarks with labels and notes, so I can capture meaningful clips.
+- As a Producer, I can also set in/out points, edit or delete any bookmarks, and lock them to finalize clip boundaries for export and OBS integration.
+- **Acceptance Criteria**
+  - Bookmarks consist of start_ms (In) and end_ms (Out) positions, stored with frame-level precision where possible
+  - Both Collaborators and Producers can:
+    - Set in/out points using player controls or keyboard shortcuts (I/O)
+    - Provide an optional label/name
+    - Add public notes (visible to all in workspace)
+    - Add private notes (visible only to creator)
+    - Real-time collaboration: bookmarks appear instantly across all active sessions
+  - Producer privileges:
+    - Edit or delete any bookmark
+    - Lock bookmarks to prevent edits by others (lock state visible to all)
+    - Unlock bookmarks as needed
+  - Validation:
+    - Out point must be greater than in point
+    - Bookmarks cannot exceed video duration
+  - Audit trail:
+    - Store created_by, updated_at, locked_by, locked_at
+- **UI Requirements**
+  - **Player Timeline**
+    - Visual Markers: In/Out handles rendered as draggable markers on the scrubber
+    - Highlighted Range: The selected clip range shaded between In/Out
+    - Precision Tools:
+      - Zoom control for fine-grained adjustments
+      - Nudge buttons (+/- 1 frame, +/- 10 frames)
+      - Tooltip showing exact timecode under cursor
+    - Accessibility:
+      - Keyboard support: arrow keys move current time; Shift modifier nudges In/Out markers
+      - Screen reader announcements: "In point set at 00:01:23:12."
+  - **Bookmark Sidebar**
+    - List View of all bookmarks:
+      - Label (or "Untitled" if blank)
+      - Time range (HH:MM:SS;FF → HH:MM:SS;FF)
+      - Creator avatar/username
+      - Visibility indicators (Public/Private)
+      - Lock status (icon + tooltip: "Locked by Producer")
+    - Inline Editing:
+      - Click to rename
+      - Hover actions: Edit, Delete, Lock/Unlock, Share
+    - Filtering & Search:
+      - By creator, lock status, has public/private notes
+      - Free-text search across labels/notes
+  - **Bookmark Modal/Drawer (Create/Edit)**
+    - Time Fields: Display In/Out as read-only with "jump to" and nudge controls
+    - Inputs:
+      - Label/name field
+      - Public notes textarea
+      - Private notes textarea (icon to indicate private)
+    - Lock State: Shown if bookmark is locked (disabled inputs, lock message)
+    - Actions:
+      - Save, Cancel
+      - Delete (if creator or Producer)
+      - Lock/Unlock toggle (Producer only)
+  - **Notifications & Real-time Indicators**
+    - Toast messages: "Bookmark saved," "Bookmark locked by Producer," etc.
+    - Sidebar Badges: Subtle highlight when new bookmarks appear or existing ones are updated
+- **Technical Notes**
+  - Database already supports start_ms/end_ms; extend schema with locked_by, locked_at for Producer control
+  - WebSocket channels broadcast bookmark.created, bookmark.updated, bookmark.deleted, bookmark.locked/unlocked
+  - Frontend should debounce rapid In/Out adjustments to avoid overwhelming updates
+  - Export flow (Post-Production / OBS Package) reads these ranges directly for clip cutting
+
+### 5) Public Clip Sharing
 - As a collaborator, I can share public links to specific bookmarked clips that others can view and download.
 - **Acceptance Criteria**
   - Each bookmark gets an unguessable `public_slug`
@@ -93,7 +157,7 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - Mobile-optimized responsive design
   - Loading states and error handling for revoked/invalid clips
 
-### 5) Clip Export for Post-Production
+### 6) Clip Export for Post-Production
 - As a Producer, I can export bookmarked clips as video files.
 - **Acceptance Criteria**
   - Export individual bookmarks or bulk selection
@@ -239,3 +303,5 @@ PLEX_SERVER_TOKEN="your-plex-server-token"
 - **Reliability**: Idempotent jobs, retries with backoff, persisted progress
 - **Accessibility**: Keyboard controls, ARIA labels, caption track support
 - **Observability**: Structured logs, job status UI, basic open/download counts
+
+

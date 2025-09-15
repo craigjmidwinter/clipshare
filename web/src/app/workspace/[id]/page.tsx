@@ -13,8 +13,11 @@ import {
   TrashIcon,
   ShareIcon,
   PlusIcon,
-  XMarkIcon
+  XMarkIcon,
+  MagnifyingGlassIcon,
+  FunnelIcon
 } from "@heroicons/react/24/outline"
+import VideoPlayer from "@/components/VideoPlayer"
 
 interface Workspace {
   id: string
@@ -74,6 +77,9 @@ export default function WorkspaceDetailPage() {
   const [showAddCollaborator, setShowAddCollaborator] = useState(false)
   const [newCollaborator, setNewCollaborator] = useState("")
   const [addingCollaborator, setAddingCollaborator] = useState(false)
+  const [bookmarkSearch, setBookmarkSearch] = useState("")
+  const [bookmarkFilter, setBookmarkFilter] = useState<"all" | "mine" | "others">("all")
+  const [creatingBookmark, setCreatingBookmark] = useState(false)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -201,6 +207,98 @@ export default function WorkspaceDetailPage() {
     }
   }
 
+  const handleCreateBookmark = async (bookmarkData: {
+    label?: string
+    publicNotes?: string
+    privateNotes?: string
+    startMs: number
+    endMs: number
+  }) => {
+    if (!workspace) return
+
+    try {
+      setCreatingBookmark(true)
+      setError("")
+
+      const response = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          ...bookmarkData
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to create bookmark")
+      }
+
+      // Refresh workspace data to get updated bookmarks
+      await fetchWorkspace()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create bookmark")
+    } finally {
+      setCreatingBookmark(false)
+    }
+  }
+
+  const handleEditBookmark = async (bookmarkId: string, updates: {
+    label?: string
+    publicNotes?: string
+    privateNotes?: string
+  }) => {
+    try {
+      setError("")
+
+      const response = await fetch("/api/bookmarks", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: bookmarkId,
+          ...updates
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to update bookmark")
+      }
+
+      // Refresh workspace data
+      await fetchWorkspace()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update bookmark")
+    }
+  }
+
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    try {
+      setError("")
+
+      const response = await fetch(`/api/bookmarks?id=${bookmarkId}`, {
+        method: "DELETE"
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to delete bookmark")
+      }
+
+      // Refresh workspace data
+      await fetchWorkspace()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete bookmark")
+    }
+  }
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -295,13 +393,17 @@ export default function WorkspaceDetailPage() {
             {/* Left Column - Video Player */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                {/* Video Player Placeholder */}
-                <div className="aspect-w-16 aspect-h-9 bg-gray-900 flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <PlayIcon className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">Video Player</p>
-                    <p className="text-sm opacity-75">Coming in Story 3</p>
-                  </div>
+                {/* Video Player */}
+                <div className="aspect-w-16 aspect-h-9">
+                  <VideoPlayer
+                    workspaceId={workspace.id}
+                    plexKey={workspace.plexKey}
+                    plexServerId={workspace.plexServerId}
+                    contentDuration={workspace.contentDuration}
+                    onBookmarkCreate={handleCreateBookmark}
+                    bookmarks={workspace.bookmarks}
+                    currentUserId={session?.user?.id || ""}
+                  />
                 </div>
                 
                 {/* Video Info */}
@@ -408,10 +510,62 @@ export default function WorkspaceDetailPage() {
 
               {/* Bookmarks */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <BookmarkIcon className="h-5 w-5 mr-2" />
-                  Bookmarks ({workspace.bookmarks.length})
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <BookmarkIcon className="h-5 w-5 mr-2" />
+                    Bookmarks ({workspace.bookmarks.length})
+                  </h3>
+                  {creatingBookmark && (
+                    <div className="text-sm text-orange-600">Creating...</div>
+                  )}
+                </div>
+
+                {/* Search and Filter */}
+                <div className="space-y-3 mb-4">
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search bookmarks..."
+                      value={bookmarkSearch}
+                      onChange={(e) => setBookmarkSearch(e.target.value)}
+                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setBookmarkFilter("all")}
+                      className={`px-3 py-1 text-xs rounded-full ${
+                        bookmarkFilter === "all"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setBookmarkFilter("mine")}
+                      className={`px-3 py-1 text-xs rounded-full ${
+                        bookmarkFilter === "mine"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      Mine
+                    </button>
+                    <button
+                      onClick={() => setBookmarkFilter("others")}
+                      className={`px-3 py-1 text-xs rounded-full ${
+                        bookmarkFilter === "others"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      Others
+                    </button>
+                  </div>
+                </div>
                 
                 {workspace.bookmarks.length === 0 ? (
                   <div className="text-center py-8">
@@ -422,36 +576,107 @@ export default function WorkspaceDetailPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {workspace.bookmarks.map((bookmark) => (
-                      <div key={bookmark.id} className="border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="text-sm font-medium text-gray-900">
-                            {bookmark.label || "Untitled Bookmark"}
-                          </h4>
-                          <button className="text-gray-400 hover:text-gray-600">
-                            <ShareIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {workspace.bookmarks
+                      .filter((bookmark) => {
+                        // Apply search filter
+                        if (bookmarkSearch) {
+                          const searchLower = bookmarkSearch.toLowerCase()
+                          const matchesLabel = bookmark.label?.toLowerCase().includes(searchLower)
+                          const matchesPublicNotes = bookmark.publicNotes?.toLowerCase().includes(searchLower)
+                          const matchesCreator = bookmark.createdBy.plexUsername?.toLowerCase().includes(searchLower)
+                          if (!matchesLabel && !matchesPublicNotes && !matchesCreator) {
+                            return false
+                          }
+                        }
                         
-                        <div className="text-xs text-gray-500 mb-2">
-                          {formatTimecode(bookmark.startMs)} - {formatTimecode(bookmark.endMs)}
-                        </div>
+                        // Apply creator filter
+                        if (bookmarkFilter === "mine") {
+                          return bookmark.createdBy.id === session?.user?.id
+                        } else if (bookmarkFilter === "others") {
+                          return bookmark.createdBy.id !== session?.user?.id
+                        }
                         
-                        {bookmark.publicNotes && (
-                          <p className="text-sm text-gray-600 mb-2">{bookmark.publicNotes}</p>
-                        )}
+                        return true
+                      })
+                      .map((bookmark) => {
+                        const isCreator = bookmark.createdBy.id === session?.user?.id
+                        const isProducer = workspace.producer.id === session?.user?.id
+                        const canEdit = isCreator || isProducer
+                        const canDelete = isCreator || isProducer
                         
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-gray-500">
-                            by {bookmark.createdBy.plexUsername || bookmark.createdBy.name || "Unknown"}
-                          </span>
-                          <span className="text-xs text-gray-400">
-                            {new Date(bookmark.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                        return (
+                          <div key={bookmark.id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50">
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="text-sm font-medium text-gray-900">
+                                {bookmark.label || "Untitled Bookmark"}
+                              </h4>
+                              <div className="flex items-center space-x-1">
+                                <button 
+                                  className="text-gray-400 hover:text-gray-600"
+                                  title="Share bookmark"
+                                >
+                                  <ShareIcon className="h-4 w-4" />
+                                </button>
+                                {canEdit && (
+                                  <button 
+                                    className="text-gray-400 hover:text-blue-600"
+                                    title="Edit bookmark"
+                                    onClick={() => {
+                                      const newLabel = prompt("Edit label:", bookmark.label || "")
+                                      if (newLabel !== null) {
+                                        handleEditBookmark(bookmark.id, { label: newLabel })
+                                      }
+                                    }}
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button 
+                                    className="text-gray-400 hover:text-red-600"
+                                    title="Delete bookmark"
+                                    onClick={() => {
+                                      if (confirm("Are you sure you want to delete this bookmark?")) {
+                                        handleDeleteBookmark(bookmark.id)
+                                      }
+                                    }}
+                                  >
+                                    <TrashIcon className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 mb-2">
+                              {formatTimecode(bookmark.startMs)} - {formatTimecode(bookmark.endMs)}
+                            </div>
+                            
+                            {bookmark.publicNotes && (
+                              <p className="text-sm text-gray-600 mb-2">{bookmark.publicNotes}</p>
+                            )}
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <img
+                                  src={bookmark.createdBy.plexAvatarUrl || "/default-avatar.png"}
+                                  alt={bookmark.createdBy.plexUsername || "User"}
+                                  className="h-4 w-4 rounded-full"
+                                />
+                                <span className="text-xs text-gray-500">
+                                  {bookmark.createdBy.plexUsername || bookmark.createdBy.name || "Unknown"}
+                                </span>
+                                {isCreator && (
+                                  <span className="text-xs text-orange-600 font-medium">You</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-gray-400">
+                                {new Date(bookmark.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
                   </div>
                 )}
               </div>
