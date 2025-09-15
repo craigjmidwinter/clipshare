@@ -50,6 +50,14 @@ export async function GET(request: NextRequest) {
             plexUsername: true,
             plexAvatarUrl: true,
           }
+        },
+        lockedBy: {
+          select: {
+            id: true,
+            name: true,
+            plexUsername: true,
+            plexAvatarUrl: true,
+          }
         }
       },
       orderBy: { createdAt: "desc" }
@@ -135,6 +143,14 @@ export async function POST(request: NextRequest) {
             plexUsername: true,
             plexAvatarUrl: true,
           }
+        },
+        lockedBy: {
+          select: {
+            id: true,
+            name: true,
+            plexUsername: true,
+            plexAvatarUrl: true,
+          }
         }
       }
     })
@@ -207,6 +223,14 @@ export async function PUT(request: NextRequest) {
       },
       include: {
         createdBy: {
+          select: {
+            id: true,
+            name: true,
+            plexUsername: true,
+            plexAvatarUrl: true,
+          }
+        },
+        lockedBy: {
           select: {
             id: true,
             name: true,

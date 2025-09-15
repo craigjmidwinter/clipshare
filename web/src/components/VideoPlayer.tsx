@@ -7,9 +7,21 @@ import {
   BookmarkIcon,
   PlusIcon,
   XMarkIcon,
-  ClockIcon
+  ClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MinusIcon,
+  MagnifyingGlassIcon,
+  MagnifyingGlassMinusIcon
 } from "@heroicons/react/24/outline"
-import * as dashjs from 'dashjs'
+// Dynamic import for dashjs to avoid SSR issues
+const loadDashjs = () => {
+  if (typeof window !== 'undefined') {
+    return import('dashjs')
+  }
+  return Promise.resolve(null)
+}
+import NLETimeline from './NLETimeline'
 
 interface VideoPlayerProps {
   workspaceId: string
@@ -30,12 +42,20 @@ interface VideoPlayerProps {
     privateNotes: string | null
     startMs: number
     endMs: number
+    lockedById: string | null
+    lockedAt: string | null
     createdBy: {
       id: string
       plexUsername: string | null
     }
+    lockedBy: {
+      id: string
+      plexUsername: string | null
+    } | null
   }>
   currentUserId: string
+  useNLETimeline?: boolean
+  showTimelineBelow?: boolean
 }
 
 interface BookmarkCreationModalProps {
@@ -45,9 +65,13 @@ interface BookmarkCreationModalProps {
     label?: string
     publicNotes?: string
     privateNotes?: string
+    startMs?: number
+    endMs?: number
   }) => void
   startTime: number
   endTime: number
+  onTimeAdjust?: (type: 'start' | 'end', direction: 'plus' | 'minus', frames: number) => void
+  onJumpToTime?: (timeMs: number) => void
 }
 
 function BookmarkCreationModal({ 
@@ -55,11 +79,21 @@ function BookmarkCreationModal({
   onClose, 
   onSubmit, 
   startTime, 
-  endTime 
+  endTime,
+  onTimeAdjust,
+  onJumpToTime
 }: BookmarkCreationModalProps) {
   const [label, setLabel] = useState("")
   const [publicNotes, setPublicNotes] = useState("")
   const [privateNotes, setPrivateNotes] = useState("")
+  const [currentStartTime, setCurrentStartTime] = useState(startTime)
+  const [currentEndTime, setCurrentEndTime] = useState(endTime)
+
+  // Update times when props change
+  useEffect(() => {
+    setCurrentStartTime(startTime)
+    setCurrentEndTime(endTime)
+  }, [startTime, endTime])
 
   const formatTimecode = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000)
@@ -73,12 +107,29 @@ function BookmarkCreationModal({
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
+  const handleTimeAdjust = (type: 'start' | 'end', direction: 'plus' | 'minus', frames: number) => {
+    const adjustment = direction === 'plus' ? frames : -frames
+    const frameMs = (1000 / 30) * adjustment // Assuming 30fps
+    
+    if (type === 'start') {
+      const newStartTime = Math.max(0, currentStartTime + frameMs)
+      setCurrentStartTime(newStartTime)
+      onTimeAdjust?.(type, direction, frames)
+    } else {
+      const newEndTime = currentEndTime + frameMs
+      setCurrentEndTime(newEndTime)
+      onTimeAdjust?.(type, direction, frames)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onSubmit({
       label: label.trim() || undefined,
       publicNotes: publicNotes.trim() || undefined,
       privateNotes: privateNotes.trim() || undefined,
+      startMs: currentStartTime,
+      endMs: currentEndTime,
     })
     setLabel("")
     setPublicNotes("")
@@ -102,9 +153,105 @@ function BookmarkCreationModal({
         </div>
 
         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <div className="flex items-center text-sm text-gray-600">
-            <ClockIcon className="h-4 w-4 mr-2" />
-            <span>{formatTimecode(startTime)} - {formatTimecode(endTime)}</span>
+          <div className="text-sm text-gray-600 mb-2">
+            <ClockIcon className="h-4 w-4 inline mr-2" />
+            Time Range
+          </div>
+          
+          {/* In Point Controls */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-700">In Point</label>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-600">{formatTimecode(currentStartTime)}</span>
+                {onJumpToTime && (
+                  <button
+                    type="button"
+                    onClick={() => onJumpToTime(currentStartTime)}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded"
+                    title="Jump to in point"
+                  >
+                    Jump
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('start', 'minus', 10)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="-10 frames"
+              >
+                -10
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('start', 'minus', 1)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="-1 frame"
+              >
+                -1
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('start', 'plus', 1)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="+1 frame"
+              >
+                +1
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('start', 'plus', 10)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="+10 frames"
+              >
+                +10
+              </button>
+            </div>
+          </div>
+
+          {/* Out Point Controls */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-gray-700">Out Point</label>
+              <span className="text-xs text-gray-600">{formatTimecode(currentEndTime)}</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('end', 'minus', 10)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="-10 frames"
+              >
+                -10
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('end', 'minus', 1)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="-1 frame"
+              >
+                -1
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('end', 'plus', 1)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="+1 frame"
+              >
+                +1
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeAdjust('end', 'plus', 10)}
+                className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
+                title="+10 frames"
+              >
+                +10
+              </button>
+            </div>
           </div>
         </div>
 
@@ -179,10 +326,12 @@ export default function VideoPlayer({
   contentDuration,
   onBookmarkCreate,
   bookmarks,
-  currentUserId
+  currentUserId,
+  useNLETimeline = false,
+  showTimelineBelow = false
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null)
+  const dashRef = useRef<any>(null)
   const consoleFilterRef = useRef<((...args: any[]) => void) | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -196,6 +345,10 @@ export default function VideoPlayer({
   const [rangeStart, setRangeStart] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [timelineZoom, setTimelineZoom] = useState(1)
+  const [showTimelineTooltip, setShowTimelineTooltip] = useState(false)
+  const [tooltipPosition, setTooltipPosition] = useState(0)
+  const [tooltipTime, setTooltipTime] = useState(0)
 
   const formatTimecode = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000)
@@ -266,6 +419,49 @@ export default function VideoPlayer({
     }
   }
 
+  const createBookmarkAtCurrentTime = () => {
+    if (videoRef.current) {
+      const currentTimeMs = videoRef.current.currentTime * 1000
+      // Set a default 5-second range around current time
+      const defaultDuration = 5000 // 5 seconds
+      const startTime = Math.max(0, currentTimeMs - defaultDuration / 2)
+      const endTime = Math.min(contentDuration, currentTimeMs + defaultDuration / 2)
+      
+      setBookmarkStartTime(startTime)
+      setBookmarkEndTime(endTime)
+      setShowBookmarkModal(true)
+    }
+  }
+
+  const handleTimelineMouseMove = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percentage = x / rect.width
+    const time = percentage * duration
+    setTooltipPosition(x)
+    setTooltipTime(time)
+    setShowTimelineTooltip(true)
+  }
+
+  const handleTimelineMouseLeave = () => {
+    setShowTimelineTooltip(false)
+  }
+
+  const handleTimeAdjust = (type: 'start' | 'end', direction: 'plus' | 'minus', frames: number) => {
+    if (videoRef.current) {
+      const adjustment = direction === 'plus' ? frames : -frames
+      const frameMs = (1000 / 30) * adjustment // Assuming 30fps
+      
+      if (type === 'start') {
+        const newStartTime = Math.max(0, bookmarkStartTime + frameMs)
+        setBookmarkStartTime(newStartTime)
+      } else {
+        const newEndTime = bookmarkEndTime + frameMs
+        setBookmarkEndTime(newEndTime)
+      }
+    }
+  }
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.target !== videoRef.current) return
 
@@ -293,8 +489,22 @@ export default function VideoPlayer({
           setIsSelectingRange(false)
         }
         break
+      case 'ArrowLeft':
+        e.preventDefault()
+        if (videoRef.current) {
+          const newTime = Math.max(0, videoRef.current.currentTime - (e.shiftKey ? 10 : 1))
+          videoRef.current.currentTime = newTime
+        }
+        break
+      case 'ArrowRight':
+        e.preventDefault()
+        if (videoRef.current) {
+          const newTime = Math.min(duration, videoRef.current.currentTime + (e.shiftKey ? 10 : 1))
+          videoRef.current.currentTime = newTime
+        }
+        break
     }
-  }, [isSelectingRange, rangeStart])
+  }, [isSelectingRange, rangeStart, duration])
 
   useEffect(() => {
     const video = videoRef.current
@@ -365,7 +575,9 @@ export default function VideoPlayer({
           // Don't throw here - let dash.js handle the error
         }
         
-        if (dashjs.supportsMediaSource()) {
+        // Load dashjs dynamically
+        const dashjs = await loadDashjs()
+        if (dashjs && dashjs.supportsMediaSource()) {
           console.log("Using dash.js for playback")
           
           // Suppress SourceBuffer error messages globally
@@ -543,17 +755,19 @@ export default function VideoPlayer({
   }
 
   return (
-    <div className="relative bg-black rounded-lg overflow-hidden">
-      {/* Video Element */}
-      <video
-        ref={videoRef}
-        className="w-full h-full"
-        controls={false}
-        preload="metadata"
-        crossOrigin="anonymous"
-      >
-        Your browser does not support the video tag.
-      </video>
+    <div className="relative">
+      {/* Video Container */}
+      <div className="bg-black rounded-lg overflow-hidden">
+        {/* Video Element */}
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls={false}
+          preload="metadata"
+          crossOrigin="anonymous"
+        >
+          Your browser does not support the video tag.
+        </video>
 
       {/* Loading Overlay */}
       {isLoading && (
@@ -586,38 +800,127 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Custom Controls Overlay */}
-      {!isLoading && !error && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4">
-        {/* Progress Bar */}
-        <div className="mb-4">
-          <div className="relative">
-            <input
-              type="range"
-              min="0"
-              max={duration || 0}
-              value={currentTime}
-              onChange={handleSeek}
-              className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-              style={{
-                background: `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / (duration || 1)) * 100}%, #4b5563 ${(currentTime / (duration || 1)) * 100}%, #4b5563 100%)`
-              }}
-            />
-            
-            {/* Bookmark Markers */}
-            {bookmarks.map((bookmark) => (
-              <div
-                key={bookmark.id}
-                className="absolute top-0 h-2 bg-blue-500 opacity-70"
+        {/* Custom Controls Overlay */}
+        {!isLoading && !error && (
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4">
+        {/* Timeline */}
+        {useNLETimeline && !showTimelineBelow ? (
+          <NLETimeline
+            duration={duration}
+            currentTime={currentTime}
+            onSeek={(time) => {
+              if (videoRef.current) {
+                videoRef.current.currentTime = time
+              }
+            }}
+            bookmarks={bookmarks}
+            onBookmarkCreate={(startMs, endMs) => {
+              setBookmarkStartTime(startMs)
+              setBookmarkEndTime(endMs)
+              setShowBookmarkModal(true)
+            }}
+            onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
+              // Handle bookmark updates
+              console.log('Bookmark update:', bookmarkId, startMs, endMs)
+            }}
+            onBookmarkDelete={(bookmarkId) => {
+              // Handle bookmark deletion
+              console.log('Bookmark delete:', bookmarkId)
+            }}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onStep={(direction, frames) => {
+              if (videoRef.current) {
+                const frameTime = frames / 30 // Assuming 30fps
+                const newTime = direction === 'forward' 
+                  ? Math.min(duration, currentTime + frameTime)
+                  : Math.max(0, currentTime - frameTime)
+                videoRef.current.currentTime = newTime
+              }
+            }}
+            videoElement={videoRef.current}
+            frameRate={30}
+          />
+        ) : !showTimelineBelow ? (
+          <div className="mb-4">
+            <div className="relative">
+              <input
+                type="range"
+                min="0"
+                max={duration || 0}
+                value={currentTime}
+                onChange={handleSeek}
+                onMouseMove={handleTimelineMouseMove}
+                onMouseLeave={handleTimelineMouseLeave}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
                 style={{
-                  left: `${(bookmark.startMs / 1000 / (duration || 1)) * 100}%`,
-                  width: `${((bookmark.endMs - bookmark.startMs) / 1000 / (duration || 1)) * 100}%`,
+                  background: `linear-gradient(to right, #f97316 0%, #f97316 ${(currentTime / (duration || 1)) * 100}%, #4b5563 ${(currentTime / (duration || 1)) * 100}%, #4b5563 100%)`
                 }}
-                title={`${bookmark.label || 'Bookmark'} - ${formatTimecode(bookmark.startMs)} - ${formatTimecode(bookmark.endMs)}`}
               />
-            ))}
+              
+              {/* Timeline Tooltip */}
+              {showTimelineTooltip && (
+                <div
+                  className="absolute bottom-6 bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded pointer-events-none z-10"
+                  style={{ left: `${tooltipPosition - 20}px` }}
+                >
+                  {formatTimecode(tooltipTime * 1000)}
+                </div>
+              )}
+              
+              {/* Bookmark Markers */}
+              {bookmarks.map((bookmark) => (
+                <div
+                  key={bookmark.id}
+                  className={`absolute top-0 h-2 rounded-sm ${
+                    bookmark.lockedById ? 'bg-red-500' : 'bg-blue-500'
+                  } opacity-70 cursor-pointer hover:opacity-90`}
+                  style={{
+                    left: `${(bookmark.startMs / 1000 / (duration || 1)) * 100}%`,
+                    width: `${((bookmark.endMs - bookmark.startMs) / 1000 / (duration || 1)) * 100}%`,
+                  }}
+                  title={`${bookmark.label || 'Untitled'} - ${formatTimecode(bookmark.startMs)} → ${formatTimecode(bookmark.endMs)}${bookmark.lockedById ? ' (Locked)' : ''}`}
+                />
+              ))}
+              
+              {/* Selection Range Highlight */}
+              {isSelectingRange && (
+                <div
+                  className="absolute top-0 h-2 bg-orange-400 opacity-50 rounded-sm"
+                  style={{
+                    left: `${(rangeStart / (duration || 1)) * 100}%`,
+                    width: `${((currentTime - rangeStart) / (duration || 1)) * 100}%`,
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setTimelineZoom(Math.max(0.5, timelineZoom - 0.25))}
+                  className="text-white hover:text-orange-400 transition-colors"
+                  title="Zoom out timeline"
+                >
+                  <MagnifyingGlassMinusIcon className="h-4 w-4" />
+                </button>
+                <span className="text-white text-xs">{Math.round(timelineZoom * 100)}%</span>
+                <button
+                  onClick={() => setTimelineZoom(Math.min(3, timelineZoom + 0.25))}
+                  className="text-white hover:text-orange-400 transition-colors"
+                  title="Zoom in timeline"
+                >
+                  <MagnifyingGlassIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="text-white text-xs">
+                {bookmarks.filter(b => !b.lockedById).length} unlocked, {bookmarks.filter(b => b.lockedById).length} locked
+              </div>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Control Buttons */}
         <div className="flex items-center justify-between">
@@ -654,22 +957,29 @@ export default function VideoPlayer({
           <div className="flex items-center space-x-4">
             {/* Bookmark Controls */}
             <div className="flex items-center space-x-2">
+              <button
+                onClick={createBookmarkAtCurrentTime}
+                className="text-white hover:text-orange-400 transition-colors flex items-center space-x-1"
+                title="Create bookmark at current time"
+              >
+                <BookmarkIcon className="h-5 w-5" />
+                <span className="text-sm">Bookmark</span>
+              </button>
+              
               {!isSelectingRange ? (
                 <button
                   onClick={startBookmarkSelection}
                   className="text-white hover:text-orange-400 transition-colors flex items-center space-x-1"
-                  title="Press 'I' to set in point"
+                  title="Set custom range (I key)"
                 >
-                  <BookmarkIcon className="h-5 w-5" />
-                  <span className="text-sm">I</span>
+                  <span className="text-sm">I/O</span>
                 </button>
               ) : (
                 <button
                   onClick={endBookmarkSelection}
                   className="text-orange-400 hover:text-orange-300 transition-colors flex items-center space-x-1"
-                  title="Press 'O' to set out point"
+                  title="Set out point (O key)"
                 >
-                  <BookmarkIcon className="h-5 w-5" />
                   <span className="text-sm">O</span>
                 </button>
               )}
@@ -690,13 +1000,56 @@ export default function VideoPlayer({
         {isSelectingRange && (
           <div className="mt-2 text-center">
             <div className="text-orange-400 text-sm">
-              Selecting range: {formatTimecode(rangeStart * 1000)} - {formatTimecode(currentTime * 1000)}
+              In point set at {formatTimecode(rangeStart * 1000)}. Move to desired out point.
             </div>
             <div className="text-gray-400 text-xs mt-1">
-              Press 'O' to set out point, or 'Escape' to cancel
+              Press 'O' or click the O button to set out point, or 'Escape' to cancel
             </div>
           </div>
         )}
+        </div>
+        )}
+      </div>
+
+      {/* Timeline Below Video */}
+      {showTimelineBelow && useNLETimeline && (
+        <div className="mt-4">
+          <NLETimeline
+            duration={duration}
+            currentTime={currentTime}
+            onSeek={(time) => {
+              if (videoRef.current) {
+                videoRef.current.currentTime = time
+              }
+            }}
+            bookmarks={bookmarks}
+            onBookmarkCreate={(startMs, endMs) => {
+              setBookmarkStartTime(startMs)
+              setBookmarkEndTime(endMs)
+              setShowBookmarkModal(true)
+            }}
+            onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
+              // Handle bookmark updates
+              console.log('Bookmark update:', bookmarkId, startMs, endMs)
+            }}
+            onBookmarkDelete={(bookmarkId) => {
+              // Handle bookmark deletion
+              console.log('Bookmark delete:', bookmarkId)
+            }}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onStep={(direction, frames) => {
+              if (videoRef.current) {
+                const frameTime = frames / 30 // Assuming 30fps
+                const newTime = direction === 'forward' 
+                  ? Math.min(duration, currentTime + frameTime)
+                  : Math.max(0, currentTime - frameTime)
+                videoRef.current.currentTime = newTime
+              }
+            }}
+            videoElement={videoRef.current}
+            frameRate={30}
+          />
         </div>
       )}
 
@@ -707,6 +1060,7 @@ export default function VideoPlayer({
         onSubmit={handleBookmarkSubmit}
         startTime={bookmarkStartTime}
         endTime={bookmarkEndTime}
+        onTimeAdjust={handleTimeAdjust}
       />
     </div>
   )

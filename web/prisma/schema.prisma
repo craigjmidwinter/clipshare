@@ -55,7 +55,8 @@ model User {
   sessions              Session[]
   workspaces            Workspace[]
   memberships           Membership[]
-  bookmarks             Bookmark[]
+  createdBookmarks      Bookmark[] @relation("BookmarkCreator")
+  lockedBookmarks       Bookmark[] @relation("BookmarkLocker")
   plexServers           PlexServer[]
   onboardingSessions    OnboardingSession[]
   plexPins              PlexPin[]
@@ -112,11 +113,14 @@ model Bookmark {
   endMs           Int      // end time in milliseconds
   publicSlug      String   @unique @default(cuid())
   isPublicRevoked Boolean  @default(false)
+  lockedById      String?  // User who locked this bookmark (Producer only)
+  lockedAt        DateTime? // When bookmark was locked
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy       User      @relation("BookmarkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  lockedBy        User?     @relation("BookmarkLocker", fields: [lockedById], references: [id], onDelete: SetNull)
 }
 
 model ProcessingJob {

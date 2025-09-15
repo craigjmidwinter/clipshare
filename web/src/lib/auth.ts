@@ -72,8 +72,8 @@ export const authOptions: NextAuthOptions = {
           
           if (dbUser) {
             token.onboardingCompleted = dbUser.onboardingCompleted
-            token.plexUserId = dbUser.plexUserId
-            token.plexUsername = dbUser.plexUsername
+            token.plexUserId = dbUser.plexUserId || undefined
+            token.plexUsername = dbUser.plexUsername || undefined
           }
         } catch (error) {
           console.error("Error fetching user data in JWT callback:", error)
