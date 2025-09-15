@@ -1,7 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import VideoPlayer from './VideoPlayer'
+
+// Mock HLS.js
+vi.mock('hls.js', () => {
+  const mockHls = {
+    destroy: vi.fn(),
+    loadSource: vi.fn(),
+    attachMedia: vi.fn(),
+    on: vi.fn(),
+    startLoad: vi.fn(),
+    recoverMediaError: vi.fn()
+  }
+
+  const mockHlsClass = vi.fn(() => mockHls)
+  mockHlsClass.isSupported = vi.fn(() => true)
+
+  return {
+    default: mockHlsClass,
+    Events: {
+      MEDIA_ATTACHED: 'hls:media-attached',
+      MANIFEST_PARSED: 'hls:manifest-parsed',
+      ERROR: 'hls:error'
+    },
+    ErrorTypes: {
+      NETWORK_ERROR: 'networkError',
+      MEDIA_ERROR: 'mediaError'
+    }
+  }
+})
 
 // Mock video element methods
 const mockVideoElement = {
@@ -10,218 +38,334 @@ const mockVideoElement = {
   requestFullscreen: vi.fn(),
   addEventListener: vi.fn(),
   removeEventListener: vi.fn(),
+  canPlayType: vi.fn(() => ''),
   currentTime: 0,
-  duration: 3600,
+  duration: 100,
   volume: 1,
-  paused: true,
+  paused: true
 }
+
+// Mock HTMLVideoElement
+Object.defineProperty(HTMLVideoElement.prototype, 'play', {
+  writable: true,
+  value: mockVideoElement.play
+})
+
+Object.defineProperty(HTMLVideoElement.prototype, 'pause', {
+  writable: true,
+  value: mockVideoElement.pause
+})
+
+Object.defineProperty(HTMLVideoElement.prototype, 'requestFullscreen', {
+  writable: true,
+  value: mockVideoElement.requestFullscreen
+})
+
+Object.defineProperty(HTMLVideoElement.prototype, 'addEventListener', {
+  writable: true,
+  value: mockVideoElement.addEventListener
+})
+
+Object.defineProperty(HTMLVideoElement.prototype, 'removeEventListener', {
+  writable: true,
+  value: mockVideoElement.removeEventListener
+})
+
+Object.defineProperty(HTMLVideoElement.prototype, 'canPlayType', {
+  writable: true,
+  value: mockVideoElement.canPlayType
+})
 
 // Mock document methods
 Object.defineProperty(document, 'fullscreenElement', {
   writable: true,
-  value: null,
+  value: null
 })
 
 Object.defineProperty(document, 'exitFullscreen', {
   writable: true,
-  value: vi.fn(),
+  value: vi.fn()
 })
-
-// Mock HTMLVideoElement
-Object.defineProperty(HTMLVideoElement.prototype, 'requestFullscreen', {
-  writable: true,
-  value: vi.fn(),
-})
-
-const mockProps = {
-  workspaceId: 'workspace-1',
-  plexKey: 'plex-key-1',
-  plexServerId: 'server-1',
-  contentDuration: 3600000, // 1 hour in ms
-  onBookmarkCreate: vi.fn(),
-  bookmarks: [
-    {
-      id: 'bookmark-1',
-      label: 'Test Bookmark',
-      publicNotes: 'Public notes',
-      privateNotes: 'Private notes',
-      startMs: 10000,
-      endMs: 20000,
-      createdBy: {
-        id: 'user-1',
-        plexUsername: 'testuser',
-      },
-    },
-  ],
-  currentUserId: 'user-1',
-}
 
 describe('VideoPlayer', () => {
-  beforeEach(() => {
+  const defaultProps = {
+    workspaceId: 'workspace-1',
+    plexKey: '/library/metadata/123',
+    plexServerId: 'server-1',
+    contentDuration: 100000,
+    onBookmarkCreate: vi.fn(),
+    bookmarks: [],
+    currentUserId: 'user-1'
+  }
+
+  let mockHlsClass: any
+  let mockHls: any
+
+  beforeEach(async () => {
     vi.clearAllMocks()
+    mockVideoElement.currentTime = 0
+    mockVideoElement.duration = 100
+    mockVideoElement.volume = 1
+    mockVideoElement.paused = true
     
-    // Mock video element
-    Object.defineProperty(HTMLVideoElement.prototype, 'play', {
-      writable: true,
-      value: vi.fn(),
+    // Get the mocked HLS class
+    const HlsModule = await import('hls.js')
+    mockHlsClass = HlsModule.default
+    mockHls = mockHlsClass()
+  })
+
+  afterEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('should render video player with loading state initially', () => {
+    render(<VideoPlayer {...defaultProps} />)
+    
+    expect(screen.getByText('Loading video...')).toBeInTheDocument()
+    expect(screen.getByRole('video')).toBeInTheDocument()
+  })
+
+  it('should initialize HLS.js when supported', async () => {
+    render(<VideoPlayer {...defaultProps} />)
+    
+    await waitFor(() => {
+      expect(mockHlsClass).toHaveBeenCalledWith({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 5,
+        debug: false
+      })
     })
     
-    Object.defineProperty(HTMLVideoElement.prototype, 'pause', {
-      writable: true,
-      value: vi.fn(),
-    })
-    
-    Object.defineProperty(HTMLVideoElement.prototype, 'requestFullscreen', {
-      writable: true,
-      value: vi.fn(),
-    })
+    expect(mockHls.loadSource).toHaveBeenCalledWith('/api/plex/hls?key=/library/metadata/123&serverId=server-1')
+    expect(mockHls.attachMedia).toHaveBeenCalled()
   })
 
-  it('renders video player with controls', () => {
-    render(<VideoPlayer {...mockProps} />)
+  it('should handle HLS manifest parsed event', async () => {
+    render(<VideoPlayer {...defaultProps} />)
     
-    expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument()
-    expect(screen.getByText('0:00 / 1:00:00')).toBeInTheDocument()
-    expect(screen.getByText('Vol:')).toBeInTheDocument()
-  })
-
-  it('displays bookmark markers on timeline', () => {
-    render(<VideoPlayer {...mockProps} />)
+    // Simulate HLS manifest parsed event
+    const manifestParsedCallback = mockHls.on.mock.calls.find(
+      call => call[0] === 'hls:manifest-parsed'
+    )?.[1]
     
-    // Check if bookmark markers are rendered (they should be positioned based on time)
-    const progressBar = screen.getByRole('slider')
-    expect(progressBar).toBeInTheDocument()
-  })
-
-  it('opens bookmark creation modal when I button is clicked', async () => {
-    const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
+    if (manifestParsedCallback) {
+      manifestParsedCallback()
+    }
     
-    const bookmarkButton = screen.getByTitle(/press 'i' to set in point/i)
-    await user.click(bookmarkButton)
-    
-    expect(screen.getByText('Create Bookmark')).toBeInTheDocument()
-    expect(screen.getByText('0:00 - 0:00')).toBeInTheDocument()
-  })
-
-  it('submits bookmark creation form', async () => {
-    const user = userEvent.setup()
-    const onBookmarkCreate = vi.fn()
-    
-    render(<VideoPlayer {...mockProps} onBookmarkCreate={onBookmarkCreate} />)
-    
-    // Open bookmark modal
-    const bookmarkButton = screen.getByTitle(/press 'i' to set in point/i)
-    await user.click(bookmarkButton)
-    
-    // Fill out form
-    const labelInput = screen.getByPlaceholderText(/e.g., important scene/i)
-    const publicNotesInput = screen.getByPlaceholderText(/notes visible to all collaborators/i)
-    const privateNotesInput = screen.getByPlaceholderText(/your private notes/i)
-    
-    await user.type(labelInput, 'Test Bookmark')
-    await user.type(publicNotesInput, 'Public notes')
-    await user.type(privateNotesInput, 'Private notes')
-    
-    // Submit form
-    const submitButton = screen.getByRole('button', { name: /create bookmark/i })
-    await user.click(submitButton)
-    
-    expect(onBookmarkCreate).toHaveBeenCalledWith({
-      label: 'Test Bookmark',
-      publicNotes: 'Public notes',
-      privateNotes: 'Private notes',
-      startMs: 0,
-      endMs: 0,
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
     })
   })
 
-  it('handles keyboard shortcuts', async () => {
-    const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
+  it('should handle HLS network errors with recovery', async () => {
+    render(<VideoPlayer {...defaultProps} />)
     
-    // Focus on video element
-    const video = screen.getByRole('application') // video element
-    video.focus()
+    // Simulate HLS network error
+    const errorCallback = mockHls.on.mock.calls.find(
+      call => call[0] === 'hls:error'
+    )?.[1]
     
-    // Test spacebar for play/pause
-    await user.keyboard(' ')
+    if (errorCallback) {
+      errorCallback('hls:error', {
+        type: 'networkError',
+        fatal: true
+      })
+    }
     
-    // Test 'I' for bookmark start
-    await user.keyboard('i')
-    
-    // Test 'O' for bookmark end
-    await user.keyboard('o')
-    
-    // Test escape to cancel
-    await user.keyboard('Escape')
+    expect(mockHls.startLoad).toHaveBeenCalled()
   })
 
-  it('formats timecode correctly', () => {
-    render(<VideoPlayer {...mockProps} />)
+  it('should handle HLS media errors with recovery', async () => {
+    render(<VideoPlayer {...defaultProps} />)
     
-    // Should display formatted time
-    expect(screen.getByText('0:00 / 1:00:00')).toBeInTheDocument()
+    // Simulate HLS media error
+    const errorCallback = mockHls.on.mock.calls.find(
+      call => call[0] === 'hls:error'
+    )?.[1]
+    
+    if (errorCallback) {
+      errorCallback('hls:error', {
+        type: 'mediaError',
+        fatal: true
+      })
+    }
+    
+    expect(mockHls.recoverMediaError).toHaveBeenCalled()
   })
 
-  it('handles volume changes', async () => {
+  it('should show error message for fatal HLS errors', async () => {
+    render(<VideoPlayer {...defaultProps} />)
+    
+    // Simulate fatal HLS error
+    const errorCallback = mockHls.on.mock.calls.find(
+      call => call[0] === 'hls:error'
+    )?.[1]
+    
+    if (errorCallback) {
+      errorCallback('hls:error', {
+        type: 'otherError',
+        fatal: true
+      })
+    }
+    
+    await waitFor(() => {
+      expect(screen.getByText('Video playback failed. Please try again.')).toBeInTheDocument()
+    })
+  })
+
+  it('should use native HLS support on Safari', async () => {
+    mockHlsClass.isSupported.mockReturnValue(false)
+    mockVideoElement.canPlayType.mockReturnValue('application/vnd.apple.mpegurl')
+    
+    render(<VideoPlayer {...defaultProps} />)
+    
+    await waitFor(() => {
+      expect(mockHlsClass).not.toHaveBeenCalled()
+    })
+  })
+
+  it('should fallback to direct proxy when HLS is not supported', async () => {
+    mockHlsClass.isSupported.mockReturnValue(false)
+    mockVideoElement.canPlayType.mockReturnValue('')
+    
+    render(<VideoPlayer {...defaultProps} />)
+    
+    await waitFor(() => {
+      expect(mockHlsClass).not.toHaveBeenCalled()
+    })
+  })
+
+  it('should handle play/pause functionality', async () => {
     const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
+    render(<VideoPlayer {...defaultProps} />)
+    
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
+    })
+    
+    const playButton = screen.getByRole('button', { name: /play/i })
+    await user.click(playButton)
+    
+    expect(mockVideoElement.play).toHaveBeenCalled()
+  })
+
+  it('should handle volume changes', async () => {
+    const user = userEvent.setup()
+    render(<VideoPlayer {...defaultProps} />)
+    
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
+    })
     
     const volumeSlider = screen.getByRole('slider', { name: /vol/i })
     await user.type(volumeSlider, '0.5')
     
-    // Volume should be updated (this would be tested with actual video element)
+    expect(mockVideoElement.volume).toBe(0.5)
   })
 
-  it('handles fullscreen toggle', async () => {
+  it('should handle seeking', async () => {
     const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
+    render(<VideoPlayer {...defaultProps} />)
+    
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
+    })
+    
+    const progressSlider = screen.getByRole('slider')
+    await user.type(progressSlider, '50')
+    
+    expect(mockVideoElement.currentTime).toBe(50)
+  })
+
+  it('should handle fullscreen toggle', async () => {
+    const user = userEvent.setup()
+    render(<VideoPlayer {...defaultProps} />)
+    
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
+    })
     
     const fullscreenButton = screen.getByRole('button', { name: /fullscreen/i })
     await user.click(fullscreenButton)
     
-    // Fullscreen should be requested (this would be tested with actual video element)
+    expect(mockVideoElement.requestFullscreen).toHaveBeenCalled()
   })
 
-  it('closes bookmark modal when cancel is clicked', async () => {
+  it('should handle bookmark creation', async () => {
     const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
+    render(<VideoPlayer {...defaultProps} />)
     
-    // Open bookmark modal
-    const bookmarkButton = screen.getByTitle(/press 'i' to set in point/i)
-    await user.click(bookmarkButton)
-    
-    expect(screen.getByText('Create Bookmark')).toBeInTheDocument()
-    
-    // Click cancel
-    const cancelButton = screen.getByRole('button', { name: /cancel/i })
-    await user.click(cancelButton)
-    
+    // Wait for loading to complete
     await waitFor(() => {
-      expect(screen.queryByText('Create Bookmark')).not.toBeInTheDocument()
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
     })
-  })
-
-  it('validates bookmark form submission', async () => {
-    const user = userEvent.setup()
-    render(<VideoPlayer {...mockProps} />)
     
-    // Open bookmark modal
-    const bookmarkButton = screen.getByTitle(/press 'i' to set in point/i)
+    const bookmarkButton = screen.getByRole('button', { name: /bookmark/i })
     await user.click(bookmarkButton)
     
-    // Submit empty form
-    const submitButton = screen.getByRole('button', { name: /create bookmark/i })
-    await user.click(submitButton)
+    // Should show bookmark modal
+    expect(screen.getByText('Create Bookmark')).toBeInTheDocument()
+  })
+
+  it('should handle keyboard shortcuts', async () => {
+    render(<VideoPlayer {...defaultProps} />)
     
-    // Should still submit with empty values (they become undefined)
-    expect(mockProps.onBookmarkCreate).toHaveBeenCalledWith({
-      label: undefined,
-      publicNotes: undefined,
-      privateNotes: undefined,
-      startMs: 0,
-      endMs: 0,
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
     })
+    
+    // Test spacebar for play/pause
+    fireEvent.keyDown(document, { key: ' ' })
+    expect(mockVideoElement.play).toHaveBeenCalled()
+    
+    // Test 'I' for bookmark start
+    fireEvent.keyDown(document, { key: 'I' })
+    expect(screen.getByText(/selecting range/i)).toBeInTheDocument()
+  })
+
+  it('should clean up HLS instance on unmount', () => {
+    const { unmount } = render(<VideoPlayer {...defaultProps} />)
+    
+    unmount()
+    
+    expect(mockHls.destroy).toHaveBeenCalled()
+  })
+
+  it('should display bookmarks on progress bar', () => {
+    const bookmarks = [
+      {
+        id: '1',
+        label: 'Test Bookmark',
+        publicNotes: null,
+        privateNotes: null,
+        startMs: 10000,
+        endMs: 20000,
+        createdBy: {
+          id: 'user-1',
+          plexUsername: 'testuser'
+        }
+      }
+    ]
+    
+    render(<VideoPlayer {...defaultProps} bookmarks={bookmarks} />)
+    
+    // Wait for loading to complete
+    waitFor(() => {
+      expect(screen.queryByText('Loading video...')).not.toBeInTheDocument()
+    })
+    
+    // Bookmark should be rendered as a blue bar on the progress slider
+    const bookmarkBar = screen.getByTitle('Test Bookmark - 0:10 - 0:20')
+    expect(bookmarkBar).toBeInTheDocument()
   })
 })

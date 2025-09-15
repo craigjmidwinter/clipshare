@@ -9,6 +9,7 @@ import {
   XMarkIcon,
   ClockIcon
 } from "@heroicons/react/24/outline"
+import * as dashjs from 'dashjs'
 
 interface VideoPlayerProps {
   workspaceId: string
@@ -181,6 +182,8 @@ export default function VideoPlayer({
   currentUserId
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null)
+  const consoleFilterRef = useRef<((...args: any[]) => void) | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -191,6 +194,8 @@ export default function VideoPlayer({
   const [bookmarkEndTime, setBookmarkEndTime] = useState(0)
   const [isSelectingRange, setIsSelectingRange] = useState(false)
   const [rangeStart, setRangeStart] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const formatTimecode = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000)
@@ -295,9 +300,176 @@ export default function VideoPlayer({
     const video = videoRef.current
     if (!video) return
 
-    // Set video source directly
-    const videoSrc = `/api/plex/proxy?key=${plexKey}&serverId=${plexServerId}`
-    video.src = videoSrc
+    setIsLoading(true)
+    setError(null)
+
+    // Store original console functions to restore later
+    const originalConsoleError = console.error
+    const originalConsoleWarn = console.warn
+    
+    // Clean up existing DASH instance
+    if (dashRef.current) {
+      try {
+        // Properly teardown the stream before destroying
+        dashRef.current.reset()
+        dashRef.current.destroy()
+      } catch (error) {
+        console.warn("Error during DASH cleanup:", error)
+      } finally {
+        dashRef.current = null
+      }
+    }
+
+    // Use DASH streaming for audio compatibility (like Plex Web)
+    const setupDASH = async () => {
+      try {
+        console.log("Setting up DASH for:", { plexKey, plexServerId })
+
+        // First, get the DASH URL from our API
+        const response = await fetch(`/api/plex/hls?key=${plexKey}&serverId=${plexServerId}`)
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("Failed to get DASH URL:", response.status, errorText)
+          throw new Error(`Failed to get DASH URL: ${response.status} - ${errorText}`)
+        }
+
+        const data = await response.json()
+        console.log("DASH API response:", data)
+
+        if (!data.dashUrl) {
+          throw new Error("No DASH URL returned from API")
+        }
+
+        const dashSrc = data.dashUrl
+        console.log("Got DASH URL:", dashSrc)
+
+        // Test if the DASH URL is accessible (with timeout)
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+
+          const testResponse = await fetch(dashSrc, {
+            method: 'HEAD',
+            signal: controller.signal
+          })
+
+          clearTimeout(timeoutId)
+          console.log("DASH URL accessibility test:", testResponse.status, testResponse.statusText)
+
+          if (!testResponse.ok) {
+            console.warn(`DASH URL returned ${testResponse.status}, but continuing anyway...`)
+            // Don't throw here - let dash.js handle the error
+          }
+        } catch (testError) {
+          console.warn("DASH URL test failed, but continuing anyway:", testError)
+          // Don't throw here - let dash.js handle the error
+        }
+        
+        if (dashjs.supportsMediaSource()) {
+          console.log("Using dash.js for playback")
+          
+          // Suppress SourceBuffer error messages globally
+          const consoleFilter = (...args: any[]) => {
+            const message = args.join(' ')
+            if (message.includes('SourceBuffer has been removed') || 
+                message.includes('getAllBufferRanges exception') ||
+                message.includes('[SourceBufferSink][audio]') ||
+                message.includes('Failed to read the \'buffered\' property')) {
+              // Suppress these specific SourceBuffer cleanup messages
+              return
+            }
+            originalConsoleError.apply(console, args)
+          }
+          
+          consoleFilterRef.current = consoleFilter
+          console.error = consoleFilter
+          
+          // Also suppress console.warn for these messages
+          const originalConsoleWarn = console.warn
+          console.warn = (...args: any[]) => {
+            const message = args.join(' ')
+            if (message.includes('SourceBuffer has been removed') || 
+                message.includes('getAllBufferRanges exception') ||
+                message.includes('[SourceBufferSink][audio]')) {
+              return
+            }
+            originalConsoleWarn.apply(console, args)
+          }
+          
+          const player = dashjs.MediaPlayer().create()
+          
+          // Configure dash.js to reduce SourceBuffer errors
+          player.updateSettings({
+            debug: {
+              logLevel: dashjs.Debug.LOG_LEVEL_ERROR // Only show actual errors
+            },
+            streaming: {
+              abr: {
+                autoSwitchBitrate: {
+                  video: true,
+                  audio: true
+                }
+              },
+              buffer: {
+                bufferTimeAtTopQuality: 30,
+                fastSwitchEnabled: true,
+                reuseExistingSourceBuffers: true // Reuse buffers to reduce cleanup issues
+              }
+            }
+          })
+          
+          dashRef.current = player
+          
+          player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+            console.log("DASH stream initialized")
+            setIsLoading(false)
+          })
+          
+          player.on(dashjs.MediaPlayer.events.ERROR, (event: any) => {
+            // Filter out SourceBuffer errors that are common and non-fatal
+            if (event.error && event.error.message && 
+                event.error.message.includes('SourceBuffer has been removed')) {
+              console.warn("SourceBuffer cleanup warning (non-fatal):", event.error.message)
+              return // Don't treat this as a fatal error
+            }
+            
+            console.error("DASH error event:", event)
+            
+            if (event.error && event.error.code) {
+              console.error("DASH error details:", {
+                code: event.error.code,
+                message: event.error.message,
+                data: event.error.data
+              })
+              
+              setError(`Video playback failed: ${event.error.message || 'Unknown error'}. Please try again.`)
+              setIsLoading(false)
+            } else {
+              console.error("DASH error with no details - possible connection issue or authentication problem")
+              setError("Failed to access video stream. This may be due to authentication issues or server permissions. Please check your Plex configuration.")
+              setIsLoading(false)
+            }
+          })
+          
+          // Add additional event handlers for better cleanup
+          player.on(dashjs.MediaPlayer.events.STREAM_TEARDOWN_COMPLETE, () => {
+            console.log("DASH stream teardown complete")
+          })
+          
+          player.initialize(video, dashSrc, false)
+        } else {
+          // Fallback to direct proxy (may not have audio)
+          console.log("DASH not supported, falling back to direct proxy")
+          const fallbackSrc = `/api/plex/proxy?key=${plexKey}&serverId=${plexServerId}`
+          video.src = fallbackSrc
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error("Failed to setup DASH:", error)
+        setError("Failed to load video. Please try again.")
+        setIsLoading(false)
+      }
+    }
 
     const handleTimeUpdate = () => setCurrentTime(video.currentTime)
     const handleDurationChange = () => setDuration(video.duration)
@@ -305,14 +477,26 @@ export default function VideoPlayer({
     const handlePause = () => setIsPlaying(false)
     const handleVolumeChange = () => setVolume(video.volume)
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
+    const handleLoadStart = () => setIsLoading(true)
+    const handleCanPlay = () => setIsLoading(false)
+    const handleError = (e: Event) => {
+      console.error("Video error:", e)
+      setError("Failed to load video. Please check your connection and try again.")
+      setIsLoading(false)
+    }
 
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('durationchange', handleDurationChange)
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
     video.addEventListener('volumechange', handleVolumeChange)
+    video.addEventListener('loadstart', handleLoadStart)
+    video.addEventListener('canplay', handleCanPlay)
+    video.addEventListener('error', handleError)
     document.addEventListener('fullscreenchange', handleFullscreenChange)
     document.addEventListener('keydown', handleKeyDown)
+
+        setupDASH()
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate)
@@ -320,8 +504,29 @@ export default function VideoPlayer({
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
       video.removeEventListener('volumechange', handleVolumeChange)
+      video.removeEventListener('loadstart', handleLoadStart)
+      video.removeEventListener('canplay', handleCanPlay)
+      video.removeEventListener('error', handleError)
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
       document.removeEventListener('keydown', handleKeyDown)
+      
+      if (dashRef.current) {
+        try {
+          // Properly teardown the stream before destroying
+          dashRef.current.reset()
+          dashRef.current.destroy()
+        } catch (error) {
+          console.warn("Error during DASH cleanup:", error)
+        } finally {
+          dashRef.current = null
+          // Restore original console functions
+          if (consoleFilterRef.current) {
+            console.error = originalConsoleError
+            console.warn = originalConsoleWarn
+            consoleFilterRef.current = null
+          }
+        }
+      }
     }
   }, [handleKeyDown, plexKey, plexServerId])
 
@@ -346,20 +551,44 @@ export default function VideoPlayer({
         controls={false}
         preload="metadata"
         crossOrigin="anonymous"
-        onError={(e) => {
-          const error = e.currentTarget.error
-          console.error("Video error:", error)
-          if (error) {
-            console.error("Error code:", error.code)
-            console.error("Error message:", error.message)
-          }
-        }}
       >
         Your browser does not support the video tag.
       </video>
 
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto mb-2"></div>
+            <div>Loading video...</div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Overlay */}
+      {error && (
+        <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center">
+          <div className="text-white text-center p-4">
+            <div className="text-red-400 mb-2">⚠️</div>
+            <div className="mb-4">{error}</div>
+            <button
+              onClick={() => {
+                setError(null)
+                setIsLoading(true)
+                // Trigger a reload by updating the key
+                window.location.reload()
+              }}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Custom Controls Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4">
+      {!isLoading && !error && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4">
         {/* Progress Bar */}
         <div className="mb-4">
           <div className="relative">
@@ -468,7 +697,8 @@ export default function VideoPlayer({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Bookmark Creation Modal */}
       <BookmarkCreationModal
