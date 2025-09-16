@@ -81,7 +81,9 @@ export async function PUT(
 
     const { id } = await params
     const body = await request.json()
-    const { label, publicNotes, privateNotes, isLocked } = body
+    const { label, publicNotes, privateNotes, isLocked, startMs, endMs } = body
+    
+    console.log('API: Bookmark update request:', { id, body })
 
     // Get the bookmark and check permissions
     const existingBookmark = await prisma.bookmark.findUnique({
@@ -180,6 +182,8 @@ export async function PUT(
         label: label !== undefined ? label : existingBookmark.label,
         publicNotes: publicNotes !== undefined ? publicNotes : existingBookmark.publicNotes,
         privateNotes: privateNotes !== undefined ? privateNotes : existingBookmark.privateNotes,
+        startMs: startMs !== undefined ? startMs : existingBookmark.startMs,
+        endMs: endMs !== undefined ? endMs : existingBookmark.endMs,
         updatedAt: new Date()
       },
       include: {

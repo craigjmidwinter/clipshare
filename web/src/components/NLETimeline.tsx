@@ -61,19 +61,37 @@ export default function NLETimeline({
   videoElement,
   frameRate = 30
 }: NLETimelineProps) {
+  
+  // Debug logging (commented out to prevent console spam)
+  // console.log('NLETimeline render:', {
+  //   duration,
+  //   currentTime,
+  //   bookmarksCount: bookmarks.length,
+  //   videoElement: !!videoElement,
+  //   frameRate,
+  //   isPlaying,
+  //   hasOnBookmarkUpdate: !!onBookmarkUpdate,
+  //   hasOnBookmarkDelete: !!onBookmarkDelete,
+  //   firstBookmark: bookmarks[0]
+  // })
+  
   // Calculate default zoom to fit full duration in viewport
   const containerWidth = 1000 // Default container width
   const defaultZoom = containerWidth / (duration * frameRate * 4) // 4 pixels per frame at zoom 1
   const [zoom, setZoom] = useState(Math.max(0.01, defaultZoom)) // Start with full duration visible
   const [scrollPosition, setScrollPosition] = useState(0)
-  const [isDragging, setIsDragging] = useState<'playhead' | 'in' | 'out' | 'bookmark' | null>(null)
+  const [isDragging, setIsDragging] = useState<'playhead' | 'in' | 'out' | 'bookmark-body' | 'bookmark-start' | 'bookmark-end' | null>(null)
   const [dragStart, setDragStart] = useState({ x: 0, time: 0 })
   const [selectionStart, setSelectionStart] = useState<number | null>(null)
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null)
+  const [draggedBookmarkId, setDraggedBookmarkId] = useState<string | null>(null)
+  const [dragPreview, setDragPreview] = useState<{ startMs: number; endMs: number } | null>(null)
   
   const timelineRef = useRef<HTMLDivElement>(null)
   const frameWidth = 4 // pixels per frame at zoom level 1
-  const totalWidth = Math.max(1000, duration * frameRate * frameWidth * zoom) // Minimum width
+  const totalWidth = Math.max(1000, isFinite(duration) && isFinite(frameRate) && isFinite(frameWidth) && isFinite(zoom) 
+    ? duration * frameRate * frameWidth * zoom 
+    : 1000) // Minimum width with validation
   
   // Frame preview management
   const { framePreviews, addFramePreview, getFramePreview } = useFramePreviews()
@@ -85,6 +103,27 @@ export default function NLETimeline({
       frames: Array.from(framePreviews.keys()).slice(0, 10)
     })
   }, [framePreviews])
+
+  // Add document-level event listeners for drag operations
+  useEffect(() => {
+    if (isDragging && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
+      const handleDocumentMouseMove = (e: MouseEvent) => {
+        handleMouseMove(e)
+      }
+      
+      const handleDocumentMouseUp = (e: MouseEvent) => {
+        handleMouseUp(e)
+      }
+      
+      document.addEventListener('mousemove', handleDocumentMouseMove)
+      document.addEventListener('mouseup', handleDocumentMouseUp)
+      
+      return () => {
+        document.removeEventListener('mousemove', handleDocumentMouseMove)
+        document.removeEventListener('mouseup', handleDocumentMouseUp)
+      }
+    }
+  }, [isDragging])
 
   // Update zoom when container becomes available
   useEffect(() => {
@@ -109,24 +148,55 @@ export default function NLETimeline({
   }
 
   const timeToPosition = (time: number) => {
-    return (time * frameRate * frameWidth * zoom) - scrollPosition
+    // Validate inputs to prevent NaN/Infinity
+    if (!isFinite(time) || !isFinite(frameRate) || !isFinite(frameWidth) || !isFinite(zoom) || !isFinite(scrollPosition)) {
+      return 0
+    }
+    if (frameRate <= 0 || frameWidth <= 0 || zoom <= 0) {
+      return 0
+    }
+    
+    const position = (time * frameRate * frameWidth * zoom) - scrollPosition
+    return isFinite(position) ? position : 0
   }
 
   const positionToTime = (position: number) => {
-    return (position + scrollPosition) / (frameRate * frameWidth * zoom)
+    // Validate inputs to prevent NaN/Infinity
+    if (!isFinite(position) || !isFinite(scrollPosition) || !isFinite(frameRate) || !isFinite(frameWidth) || !isFinite(zoom)) {
+      return 0
+    }
+    if (frameRate <= 0 || frameWidth <= 0 || zoom <= 0) {
+      return 0
+    }
+    
+    const time = (position + scrollPosition) / (frameRate * frameWidth * zoom)
+    return isFinite(time) ? time : 0
   }
 
-  const handleMouseDown = (e: React.MouseEvent, type: 'playhead' | 'in' | 'out' | 'bookmark', bookmarkId?: string) => {
+  const handleMouseDown = (e: React.MouseEvent, type: 'playhead' | 'in' | 'out' | 'bookmark-body' | 'bookmark-start' | 'bookmark-end', bookmarkId?: string) => {
     e.preventDefault()
+    e.stopPropagation()
+    
+    const rect = timelineRef.current!.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseTime = positionToTime(mouseX)
+    
+    // console.log('MouseDown:', { type, bookmarkId, mouseTime, hasOnBookmarkUpdate: !!onBookmarkUpdate })
+    
     setIsDragging(type)
-    setDragStart({ x: e.clientX, time: positionToTime(e.clientX - timelineRef.current!.getBoundingClientRect().left) })
+    setDragStart({ x: e.clientX, time: mouseTime })
     
     if (type === 'playhead') {
-      onSeek(positionToTime(e.clientX - timelineRef.current!.getBoundingClientRect().left))
+      onSeek(mouseTime)
+    }
+    
+    if (bookmarkId && (type === 'bookmark-body' || type === 'bookmark-start' || type === 'bookmark-end')) {
+      setDraggedBookmarkId(bookmarkId)
+      console.log('Set dragged bookmark:', bookmarkId)
     }
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.MouseEvent | MouseEvent) => {
     if (!isDragging || !timelineRef.current) return
 
     const rect = timelineRef.current.getBoundingClientRect()
@@ -139,16 +209,118 @@ export default function NLETimeline({
       setSelectionStart(Math.min(newTime, selectionEnd))
     } else if (isDragging === 'out' && selectionStart !== null) {
       setSelectionEnd(Math.max(newTime, selectionStart))
+    } else if (draggedBookmarkId && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
+      // Calculate real-time drag preview position
+      const bookmark = bookmarks.find(b => b.id === draggedBookmarkId)
+      if (bookmark) {
+        const currentStartTime = bookmark.startMs / 1000
+        const currentEndTime = bookmark.endMs / 1000
+        
+        if (isDragging === 'bookmark-body') {
+          // Move entire bookmark - calculate offset from initial click position
+          const bookmarkDuration = currentEndTime - currentStartTime
+          const dragOffset = newTime - dragStart.time
+          const newStartTime = Math.max(0, Math.min(duration - bookmarkDuration, currentStartTime + dragOffset))
+          const newEndTime = newStartTime + bookmarkDuration
+          
+          setDragPreview({ startMs: newStartTime * 1000, endMs: newEndTime * 1000 })
+        } else if (isDragging === 'bookmark-start') {
+          // Resize start time
+          const newStartTime = Math.max(0, Math.min(currentEndTime - 0.1, newTime))
+          setDragPreview({ startMs: newStartTime * 1000, endMs: currentEndTime * 1000 })
+        } else if (isDragging === 'bookmark-end') {
+          // Resize end time
+          const newEndTime = Math.max(currentStartTime + 0.1, Math.min(duration, newTime))
+          setDragPreview({ startMs: currentStartTime * 1000, endMs: newEndTime * 1000 })
+        }
+      }
     }
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent | MouseEvent) => {
+    // console.log('MouseUp:', { isDragging, draggedBookmarkId, hasOnBookmarkUpdate: !!onBookmarkUpdate })
+    
     if (isDragging === 'in' || isDragging === 'out') {
       if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
         onBookmarkCreate(selectionStart * 1000, selectionEnd * 1000)
       }
       setSelectionStart(null)
       setSelectionEnd(null)
+    } else if (draggedBookmarkId && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
+      // Handle bookmark drag completion - get current mouse position from the mouseup event
+      const rect = timelineRef.current!.getBoundingClientRect()
+      const currentMouseX = e.clientX - rect.left // Use the actual mouseup position
+      const currentTime = Math.max(0, Math.min(duration, positionToTime(currentMouseX)))
+      
+      const bookmark = bookmarks.find(b => b.id === draggedBookmarkId)
+      if (bookmark) {
+        const currentStartTime = bookmark.startMs / 1000
+        const currentEndTime = bookmark.endMs / 1000
+        
+        if (isDragging === 'bookmark-body') {
+          // Move entire bookmark - calculate offset from initial click position
+          const bookmarkDuration = currentEndTime - currentStartTime
+          const dragOffset = currentTime - dragStart.time // currentTime is the mouse position time
+          const newStartTime = Math.max(0, Math.min(duration - bookmarkDuration, currentStartTime + dragOffset))
+          const newEndTime = newStartTime + bookmarkDuration
+          
+          // console.log('Bookmark body drag:', {
+          //   originalStart: currentStartTime,
+          //   originalEnd: currentEndTime,
+          //   dragOffset,
+          //   newStartTime,
+          //   newEndTime,
+          //   currentTime,
+          //   dragStartTime: dragStart.time
+          // })
+          
+          console.log('Timeline: Calling onBookmarkUpdate for bookmark body drag:', {
+            bookmarkId: draggedBookmarkId,
+            startMs: newStartTime * 1000,
+            endMs: newEndTime * 1000,
+            hasOnBookmarkUpdate: !!onBookmarkUpdate
+          })
+          onBookmarkUpdate(draggedBookmarkId, newStartTime * 1000, newEndTime * 1000)
+        } else if (isDragging === 'bookmark-start') {
+          // Resize start time - use current mouse position directly
+          const newStartTime = Math.max(0, Math.min(currentEndTime - 0.1, currentTime))
+          
+          // console.log('Bookmark start resize:', {
+          //   originalStart: currentStartTime,
+          //   originalEnd: currentEndTime,
+          //   newStartTime,
+          //   currentTime
+          // })
+          
+          console.log('Timeline: Calling onBookmarkUpdate for start resize:', {
+            bookmarkId: draggedBookmarkId,
+            startMs: newStartTime * 1000,
+            endMs: currentEndTime * 1000,
+            hasOnBookmarkUpdate: !!onBookmarkUpdate
+          })
+          onBookmarkUpdate(draggedBookmarkId, newStartTime * 1000, currentEndTime * 1000)
+        } else if (isDragging === 'bookmark-end') {
+          // Resize end time - use current mouse position directly
+          const newEndTime = Math.max(currentStartTime + 0.1, Math.min(duration, currentTime))
+          
+          // console.log('Bookmark end resize:', {
+          //   originalStart: currentStartTime,
+          //   originalEnd: currentEndTime,
+          //   newEndTime,
+          //   currentTime
+          // })
+          
+          console.log('Timeline: Calling onBookmarkUpdate for end resize:', {
+            bookmarkId: draggedBookmarkId,
+            startMs: currentStartTime * 1000,
+            endMs: newEndTime * 1000,
+            hasOnBookmarkUpdate: !!onBookmarkUpdate
+          })
+          onBookmarkUpdate(draggedBookmarkId, currentStartTime * 1000, newEndTime * 1000)
+        }
+      }
+      setDraggedBookmarkId(null)
+      setDragPreview(null) // Clear drag preview
     }
     setIsDragging(null)
   }
@@ -204,38 +376,53 @@ export default function NLETimeline({
 
   const generateFrameMarkers = () => {
     const markers = []
-    // Dynamic interval based on zoom level
+    // Dynamic interval based on zoom level - more frequent labels
     let interval = 1
-    if (zoom < 0.1) interval = 60 // 1 minute intervals for very zoomed out
-    else if (zoom < 0.3) interval = 30 // 30 second intervals
-    else if (zoom < 0.5) interval = 10 // 10 second intervals
-    else if (zoom < 1) interval = 5 // 5 second intervals
-    else if (zoom < 2) interval = 1 // 1 second intervals
-    else interval = 0.5 // Half second intervals for high zoom
+    let minorInterval = 0.5
+    if (zoom < 0.05) { interval = 600; minorInterval = 120 } // 10 minute intervals, 2 minute minors
+    else if (zoom < 0.1) { interval = 300; minorInterval = 60 } // 5 minute intervals, 1 minute minors
+    else if (zoom < 0.2) { interval = 120; minorInterval = 30 } // 2 minute intervals, 30 second minors
+    else if (zoom < 0.4) { interval = 60; minorInterval = 15 } // 1 minute intervals, 15 second minors
+    else if (zoom < 0.8) { interval = 30; minorInterval = 10 } // 30 second intervals, 10 second minors
+    else if (zoom < 1.5) { interval = 10; minorInterval = 5 } // 10 second intervals, 5 second minors
+    else if (zoom < 3) { interval = 5; minorInterval = 1 } // 5 second intervals, 1 second minors
+    else if (zoom < 6) { interval = 1; minorInterval = 0.5 } // 1 second intervals, 0.5 second minors
+    else { interval = 0.5; minorInterval = 0.1 } // 0.5 second intervals, 0.1 second minors
     
     // Calculate visible time range based on scroll position and zoom
     const containerWidth = timelineRef.current?.clientWidth || 1000
-    const pixelsPerSecond = frameRate * frameWidth * zoom
+    const pixelsPerSecond = isFinite(frameRate * frameWidth * zoom) && frameRate * frameWidth * zoom > 0 
+      ? frameRate * frameWidth * zoom 
+      : 1
     
     const startTime = Math.max(0, scrollPosition / pixelsPerSecond)
     const endTime = Math.min(duration, (scrollPosition + containerWidth) / pixelsPerSecond)
     
     // Round to interval boundaries
-    const roundedStartTime = Math.floor(startTime / interval) * interval
-    const roundedEndTime = Math.ceil(endTime / interval) * interval
+    const roundedStartTime = Math.floor(startTime / minorInterval) * minorInterval
+    const roundedEndTime = Math.ceil(endTime / minorInterval) * minorInterval
     
-    for (let time = roundedStartTime; time <= roundedEndTime; time += interval) {
+    for (let time = roundedStartTime; time <= roundedEndTime; time += minorInterval) {
       if (time >= 0 && time <= duration) {
         const position = timeToPosition(time)
-        const isMajorMarker = time % (interval * 5) === 0 // Major markers every 5 intervals
+        const isMajorMarker = Math.abs(time % interval) < minorInterval / 2 // Major markers at interval boundaries
+        const isMediumMarker = Math.abs(time % (interval / 2)) < minorInterval / 2 && !isMajorMarker
+        
         markers.push(
           <div
             key={time}
-            className={`absolute top-0 bottom-0 w-px ${isMajorMarker ? 'bg-gray-300' : 'bg-gray-500'}`}
+            className={`absolute top-0 bottom-0 w-px ${
+              isMajorMarker ? 'bg-gray-200' : 
+              isMediumMarker ? 'bg-gray-400' : 
+              'bg-gray-600'
+            }`}
             style={{ left: position }}
           >
-            {isMajorMarker && (
-              <div className="absolute -top-6 text-xs text-gray-500 whitespace-nowrap font-mono">
+            {/* Show timecode labels for major and medium markers */}
+            {(isMajorMarker || isMediumMarker) && (
+              <div className={`absolute -top-6 text-xs whitespace-nowrap font-mono px-1 rounded ${
+                isMajorMarker ? 'text-white bg-gray-700' : 'text-gray-300 bg-gray-800'
+              }`}>
                 {formatTimecode(time)}
               </div>
             )}
@@ -252,7 +439,7 @@ export default function NLETimeline({
     
     // Calculate visible frame range based on scroll position and zoom
     const containerWidth = timelineRef.current?.clientWidth || 1000
-    const pixelsPerFrame = frameWidth * zoom
+    const pixelsPerFrame = isFinite(frameWidth * zoom) && frameWidth * zoom > 0 ? frameWidth * zoom : 1
     
     const startFrame = Math.max(0, Math.floor(scrollPosition / pixelsPerFrame))
     const endFrame = Math.min(duration * frameRate, Math.ceil((scrollPosition + containerWidth) / pixelsPerFrame))
@@ -269,7 +456,7 @@ export default function NLETimeline({
             className="absolute top-0 h-full bg-gray-600 border-r border-gray-500"
             style={{ 
               left: position,
-              width: Math.max(1, frameWidth * zoom)
+              width: Math.max(1, isFinite(frameWidth * zoom) ? frameWidth * zoom : 1)
             }}
             title={`Frame ${frame} - ${formatTimecode(time)}`}
           >
@@ -278,7 +465,7 @@ export default function NLETimeline({
                 src={framePreview}
                 alt={`Frame ${frame}`}
                 className="w-full h-full object-cover opacity-80"
-                style={{ width: Math.max(1, frameWidth * zoom) }}
+                style={{ width: Math.max(1, isFinite(frameWidth * zoom) ? frameWidth * zoom : 1) }}
               />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-500 to-gray-700 opacity-60" />
@@ -290,6 +477,8 @@ export default function NLETimeline({
     return frames
   }
 
+  // console.log('NLETimeline: About to render JSX')
+  
   return (
     <div className="bg-gray-900 text-white p-3">
       {/* Timeline Controls */}
@@ -368,6 +557,7 @@ export default function NLETimeline({
               scrollPosition={scrollPosition}
               containerWidth={timelineRef.current?.clientWidth || 1000}
               onFrameGenerated={addFramePreview}
+              isDragging={isDragging !== null}
             />
           )}
         </div>
@@ -432,31 +622,65 @@ export default function NLETimeline({
             )}
 
             {/* Bookmarks */}
-            {bookmarks.map((bookmark) => (
-              <div
-                key={bookmark.id}
-                className={`absolute top-4 bottom-4 rounded cursor-move z-5 ${
-                  bookmark.lockedById ? 'bg-red-600' : 'bg-blue-600'
-                } opacity-80 hover:opacity-100`}
-                style={{
-                  left: timeToPosition(bookmark.startMs / 1000),
-                  width: timeToPosition((bookmark.endMs - bookmark.startMs) / 1000)
-                }}
-                onMouseDown={(e) => handleMouseDown(e, 'bookmark', bookmark.id)}
-                title={`${bookmark.label || 'Untitled'} - ${formatTimecode(bookmark.startMs / 1000)} → ${formatTimecode(bookmark.endMs / 1000)}`}
-              >
-                <div className="p-1 text-xs truncate">
-                  {bookmark.label || 'Untitled'}
+            {bookmarks.map((bookmark) => {
+              // Use drag preview position if this bookmark is being dragged
+              const isBeingDragged = draggedBookmarkId === bookmark.id && dragPreview
+              const startTime = isBeingDragged ? dragPreview.startMs / 1000 : bookmark.startMs / 1000
+              const endTime = isBeingDragged ? dragPreview.endMs / 1000 : bookmark.endMs / 1000
+              const startPos = timeToPosition(startTime)
+              const endPos = timeToPosition(endTime)
+              const bookmarkWidth = Math.max(0, endPos - startPos)
+              const minWidth = 20 // Minimum width for bookmark
+              
+              return (
+                <div key={bookmark.id} className="absolute top-4 bottom-4 z-5">
+                  {/* Bookmark Body - Draggable */}
+                  <div
+                    className={`absolute top-0 bottom-0 rounded cursor-move ${
+                      bookmark.lockedById ? 'bg-red-600' : 'bg-blue-600'
+                    } ${isBeingDragged ? 'opacity-60 border-2 border-yellow-400' : 'opacity-80 hover:opacity-100'} transition-opacity`}
+                    style={{
+                      left: startPos,
+                      width: Math.max(minWidth, bookmarkWidth),
+                      right: bookmarkWidth < minWidth ? startPos + minWidth : undefined
+                    }}
+                    onMouseDown={(e) => handleMouseDown(e, 'bookmark-body', bookmark.id)}
+                    title={`${bookmark.label || 'Untitled'} - ${formatTimecode(startTime)} → ${formatTimecode(endTime)}`}
+                  >
+                    <div className="p-1 text-xs truncate text-white">
+                      {bookmark.label || 'Untitled'}
+                    </div>
+                  </div>
+
+                  {/* Left Handle - Resize Start */}
+                  <div
+                    className="absolute top-0 bottom-0 w-2 bg-green-500 cursor-ew-resize z-10 opacity-0 hover:opacity-100 transition-opacity"
+                    style={{ left: Math.max(0, startPos - 1) }}
+                    onMouseDown={(e) => handleMouseDown(e, 'bookmark-start', bookmark.id)}
+                    title={`Adjust start time: ${formatTimecode(startTime)}`}
+                  >
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-4 bg-white rounded" />
+                  </div>
+
+                  {/* Right Handle - Resize End */}
+                  <div
+                    className="absolute top-0 bottom-0 w-2 bg-red-500 cursor-ew-resize z-10 opacity-0 hover:opacity-100 transition-opacity"
+                    style={{ left: Math.max(0, endPos - 1) }}
+                    onMouseDown={(e) => handleMouseDown(e, 'bookmark-end', bookmark.id)}
+                    title={`Adjust end time: ${formatTimecode(endTime)}`}
+                  >
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1 h-4 bg-white rounded" />
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
         {/* Timeline Instructions */}
         <div className="p-2 bg-gray-700 text-xs text-gray-300">
           <div className="flex justify-between">
-            <span>Click to seek • Ctrl/Cmd+Click to set IN • Shift+Click to set OUT • Drag handles to adjust</span>
+            <span>Click to seek • Ctrl/Cmd+Click to set IN • Shift+Click to set OUT • Drag bookmark handles to resize • Drag bookmark body to move</span>
             <div className="flex items-center space-x-2">
               <span>{bookmarks.length} bookmarks</span>
               {videoElement && framePreviews.size === 0 && (

@@ -22,6 +22,7 @@ import {
   EyeSlashIcon
 } from "@heroicons/react/24/outline"
 import VideoPlayer from "@/components/VideoPlayer"
+import NLETimeline from "@/components/NLETimeline"
 
 interface Workspace {
   id: string
@@ -93,6 +94,11 @@ export default function WorkspaceDetailPage() {
   const [creatingBookmark, setCreatingBookmark] = useState(false)
   const [editingBookmark, setEditingBookmark] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
+  
+  // Video player state for timeline integration
+  const [currentTime, setCurrentTime] = useState(0)
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -268,22 +274,26 @@ export default function WorkspaceDetailPage() {
     label?: string
     publicNotes?: string
     privateNotes?: string
+    startMs?: number
+    endMs?: number
+    isLocked?: boolean
   }) => {
     try {
       setError("")
+      
+      console.log('handleEditBookmark called:', { bookmarkId, updates })
 
-      const response = await fetch("/api/bookmarks", {
+      const response = await fetch(`/api/bookmarks/${bookmarkId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          id: bookmarkId,
-          ...updates
-        })
+        body: JSON.stringify(updates)
       })
 
+      console.log('API response status:', response.status)
       const data = await response.json()
+      console.log('API response data:', data)
 
       if (!data.success) {
         throw new Error(data.error || "Failed to update bookmark")
@@ -298,7 +308,10 @@ export default function WorkspaceDetailPage() {
           )
         })
       }
+      
+      console.log('Bookmark updated successfully')
     } catch (err) {
+      console.error('Error updating bookmark:', err)
       setError(err instanceof Error ? err.message : "Failed to update bookmark")
     }
   }
@@ -327,6 +340,11 @@ export default function WorkspaceDetailPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete bookmark")
     }
+  }
+
+  // Wrapper function to convert timeline's onBookmarkUpdate parameters to handleEditBookmark format
+  const handleBookmarkUpdate = async (bookmarkId: string, startMs: number, endMs: number) => {
+    await handleEditBookmark(bookmarkId, { startMs, endMs })
   }
 
   const handleLockBookmark = async (bookmarkId: string, isLocked: boolean) => {
@@ -407,6 +425,37 @@ export default function WorkspaceDetailPage() {
   const handleCancelInlineEdit = () => {
     setEditingBookmark(null)
     setEditingLabel("")
+  }
+
+  // Video player handlers for timeline integration
+  const handleVideoSeek = (time: number) => {
+    setCurrentTime(time)
+    if (videoElement) {
+      videoElement.currentTime = time
+    }
+  }
+
+  const handleVideoPlayPause = () => {
+    if (videoElement) {
+      if (videoElement.paused) {
+        videoElement.play()
+        setIsPlaying(true)
+      } else {
+        videoElement.pause()
+        setIsPlaying(false)
+      }
+    }
+  }
+
+  const handleVideoStep = (direction: 'forward' | 'backward', frames: number) => {
+    if (videoElement) {
+      const frameTime = frames / 30 // Assuming 30fps
+      const newTime = direction === 'forward' 
+        ? videoElement.currentTime + frameTime
+        : videoElement.currentTime - frameTime
+      videoElement.currentTime = Math.max(0, Math.min(videoElement.duration, newTime))
+      setCurrentTime(videoElement.currentTime)
+    }
   }
 
   if (status === "loading") {
@@ -511,10 +560,15 @@ export default function WorkspaceDetailPage() {
                     plexServerId={workspace.plexServerId}
                     contentDuration={workspace.contentDuration}
                     onBookmarkCreate={handleCreateBookmark}
+                    onBookmarkUpdate={handleEditBookmark}
+                    onBookmarkDelete={handleDeleteBookmark}
+                    onVideoElementReady={setVideoElement}
+                    onTimeUpdate={setCurrentTime}
+                    onPlayStateChange={setIsPlaying}
                     bookmarks={workspace.bookmarks}
                     currentUserId={session?.user?.id || ""}
-                    useNLETimeline={true}
-                    showTimelineBelow={true}
+                    useNLETimeline={false}
+                    showTimelineBelow={false}
                   />
                 </div>
                 
@@ -535,6 +589,26 @@ export default function WorkspaceDetailPage() {
                     <span>Last updated {new Date(workspace.updatedAt).toLocaleDateString()}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* NLE Timeline - Outside Video Player */}
+            <div className="lg:col-span-2">
+              <div className="bg-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-hidden">
+                <NLETimeline
+                  duration={workspace.contentDuration / 1000} // Convert ms to seconds
+                  currentTime={currentTime}
+                  onSeek={handleVideoSeek}
+                  bookmarks={workspace.bookmarks}
+                  onBookmarkCreate={handleCreateBookmark}
+                  onBookmarkUpdate={handleBookmarkUpdate}
+                  onBookmarkDelete={handleDeleteBookmark}
+                  videoElement={videoElement}
+                  frameRate={30}
+                  isPlaying={isPlaying}
+                  onPlayPause={handleVideoPlayPause}
+                  onStep={handleVideoStep}
+                />
               </div>
             </div>
 

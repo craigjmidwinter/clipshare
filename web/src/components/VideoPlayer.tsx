@@ -35,6 +35,11 @@ interface VideoPlayerProps {
     startMs: number
     endMs: number
   }) => void
+  onBookmarkUpdate?: (bookmarkId: string, startMs: number, endMs: number) => void
+  onBookmarkDelete?: (bookmarkId: string) => void
+  onVideoElementReady?: (videoElement: HTMLVideoElement) => void
+  onTimeUpdate?: (currentTime: number) => void
+  onPlayStateChange?: (isPlaying: boolean) => void
   bookmarks: Array<{
     id: string
     label: string | null
@@ -325,6 +330,11 @@ export default function VideoPlayer({
   plexServerId,
   contentDuration,
   onBookmarkCreate,
+  onBookmarkUpdate,
+  onBookmarkDelete,
+  onVideoElementReady,
+  onTimeUpdate,
+  onPlayStateChange,
   bookmarks,
   currentUserId,
   useNLETimeline = false,
@@ -580,16 +590,17 @@ export default function VideoPlayer({
         if (dashjs && dashjs.supportsMediaSource()) {
           console.log("Using dash.js for playback")
           
-          // Suppress SourceBuffer error messages globally
+          // Suppress only specific non-fatal SourceBuffer messages
           const consoleFilter = (...args: any[]) => {
             const message = args.join(' ')
-            if (message.includes('SourceBuffer has been removed') || 
-                message.includes('getAllBufferRanges exception') ||
-                message.includes('[SourceBufferSink][audio]') ||
-                message.includes('Failed to read the \'buffered\' property')) {
-              // Suppress these specific SourceBuffer cleanup messages
+            // Only suppress very specific, known non-fatal messages
+            if ((message.includes('SourceBuffer has been removed') && message.includes('cleanup')) ||
+                message.includes('getAllBufferRanges exception: Failed to read the \'buffered\' property from \'SourceBuffer\': This SourceBuffer has been removed from the parent media source') ||
+                message.includes('SourceBuffer append failed "InvalidStateError: Failed to execute \'appendBuffer\' on \'SourceBuffer\': This SourceBuffer has been removed from the parent media source."')) {
+              // These are cleanup messages, not errors
               return
             }
+            // Log other errors normally
             originalConsoleError.apply(console, args)
           }
           
@@ -645,20 +656,26 @@ export default function VideoPlayer({
               return // Don't treat this as a fatal error
             }
             
-            console.error("DASH error event:", event)
+            // Log error details for debugging
+            console.error("DASH playback error:", {
+              code: event.error?.code,
+              message: event.error?.message,
+              type: event.error?.type
+            })
             
-            if (event.error && event.error.code) {
-              console.error("DASH error details:", {
-                code: event.error.code,
-                message: event.error.message,
-                data: event.error.data
-              })
-              
-              setError(`Video playback failed: ${event.error.message || 'Unknown error'}. Please try again.`)
+            // Handle specific error types based on error message or code
+            if (event.error && event.error.message && event.error.message.includes('manifest')) {
+              setError("Failed to load video manifest. Please try again.")
+              setIsLoading(false)
+            } else if (event.error && event.error.message && event.error.message.includes('MediaSource')) {
+              setError("Your browser doesn't support the required video format.")
+              setIsLoading(false)
+            } else if (event.error && event.error.message && event.error.message.includes('network')) {
+              setError("Network error while loading video. Please check your connection and try again.")
               setIsLoading(false)
             } else {
-              console.error("DASH error with no details - possible connection issue or authentication problem")
-              setError("Failed to access video stream. This may be due to authentication issues or server permissions. Please check your Plex configuration.")
+              // For other errors, try to continue or show generic error
+              console.warn("DASH non-fatal error, continuing playback:", event.error)
               setIsLoading(false)
             }
           })
@@ -683,14 +700,34 @@ export default function VideoPlayer({
       }
     }
 
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime)
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime)
+      if (onTimeUpdate) {
+        onTimeUpdate(video.currentTime)
+      }
+    }
     const handleDurationChange = () => setDuration(video.duration)
-    const handlePlay = () => setIsPlaying(true)
-    const handlePause = () => setIsPlaying(false)
+    const handlePlay = () => {
+      setIsPlaying(true)
+      if (onPlayStateChange) {
+        onPlayStateChange(true)
+      }
+    }
+    const handlePause = () => {
+      setIsPlaying(false)
+      if (onPlayStateChange) {
+        onPlayStateChange(false)
+      }
+    }
     const handleVolumeChange = () => setVolume(video.volume)
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement)
     const handleLoadStart = () => setIsLoading(true)
-    const handleCanPlay = () => setIsLoading(false)
+    const handleCanPlay = () => {
+      setIsLoading(false)
+      if (onVideoElementReady && video) {
+        onVideoElementReady(video)
+      }
+    }
     const handleError = (e: Event) => {
       console.error("Video error:", e)
       setError("Failed to load video. Please check your connection and try again.")
@@ -821,11 +858,15 @@ export default function VideoPlayer({
             }}
             onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
               // Handle bookmark updates
-              console.log('Bookmark update:', bookmarkId, startMs, endMs)
+              if (onBookmarkUpdate) {
+                onBookmarkUpdate(bookmarkId, startMs, endMs)
+              }
             }}
             onBookmarkDelete={(bookmarkId) => {
               // Handle bookmark deletion
-              console.log('Bookmark delete:', bookmarkId)
+              if (onBookmarkDelete) {
+                onBookmarkDelete(bookmarkId)
+              }
             }}
             isPlaying={isPlaying}
             onPlayPause={handlePlayPause}
@@ -1030,11 +1071,15 @@ export default function VideoPlayer({
             }}
             onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
               // Handle bookmark updates
-              console.log('Bookmark update:', bookmarkId, startMs, endMs)
+              if (onBookmarkUpdate) {
+                onBookmarkUpdate(bookmarkId, startMs, endMs)
+              }
             }}
             onBookmarkDelete={(bookmarkId) => {
               // Handle bookmark deletion
-              console.log('Bookmark delete:', bookmarkId)
+              if (onBookmarkDelete) {
+                onBookmarkDelete(bookmarkId)
+              }
             }}
             isPlaying={isPlaying}
             onPlayPause={handlePlayPause}

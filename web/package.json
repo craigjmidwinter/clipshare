@@ -12,7 +12,9 @@
     "test:coverage": "vitest run --coverage",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
-    "generate-client-id": "node scripts/generate-client-id.mjs"
+    "generate-client-id": "node scripts/generate-client-id.mjs",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -42,15 +44,25 @@
     "vitest": "^3.2.4"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^4.1.1",
     "@eslint/eslintrc": "^3",
+    "@storybook/addon-a11y": "^9.1.6",
+    "@storybook/addon-docs": "^9.1.6",
+    "@storybook/addon-onboarding": "^9.1.6",
+    "@storybook/addon-vitest": "^9.1.6",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "3.2.4",
     "eslint": "^9",
     "eslint-config-next": "15.5.3",
+    "eslint-plugin-storybook": "^9.1.6",
+    "storybook": "^9.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@storybook/nextjs-vite": "^9.1.6",
+    "@vitest/browser": "3.2.4",
+    "playwright": "^1.55.0"
   }
 }

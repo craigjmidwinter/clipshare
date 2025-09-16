@@ -10,6 +10,7 @@ interface FramePreviewGeneratorProps {
   scrollPosition: number
   containerWidth: number
   onFrameGenerated: (frameNumber: number, dataUrl: string) => void
+  isDragging?: boolean // Disable generation during drag operations
 }
 
 export default function FramePreviewGenerator({
@@ -19,14 +20,15 @@ export default function FramePreviewGenerator({
   zoom,
   scrollPosition,
   containerWidth,
-  onFrameGenerated
+  onFrameGenerated,
+  isDragging = false,
 }: FramePreviewGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [generatedFrames, setGeneratedFrames] = useState<Set<number>>(new Set())
   const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
-    if (!videoElement || !canvasRef.current) return
+    if (!videoElement || !canvasRef.current || isDragging) return
 
     console.log('FramePreviewGenerator: Starting generation', {
       readyState: videoElement.readyState,
@@ -182,7 +184,7 @@ export default function FramePreviewGenerator({
     // Debounce the generation to avoid excessive seeking
     const timeoutId = setTimeout(generateFramePreviews, 1000)
     return () => clearTimeout(timeoutId)
-  }, [videoElement, frameRate, duration, zoom, scrollPosition, containerWidth, generatedFrames, onFrameGenerated])
+  }, [videoElement, frameRate, duration, zoom, scrollPosition, containerWidth, generatedFrames, onFrameGenerated, isDragging])
 
   return (
     <canvas
