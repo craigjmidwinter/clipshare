@@ -19,7 +19,12 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   EyeIcon,
-  EyeSlashIcon
+  EyeSlashIcon,
+  ArrowDownTrayIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon
 } from "@heroicons/react/24/outline"
 import VideoPlayer from "@/components/VideoPlayer"
 import NLETimeline from "@/components/NLETimeline"
@@ -34,6 +39,8 @@ interface Workspace {
   contentDuration: number
   plexKey: string
   plexServerId: string
+  processingStatus: string
+  processingProgress: number
   createdAt: string
   updatedAt: string
   producer: {
@@ -59,8 +66,6 @@ interface Workspace {
     privateNotes: string | null
     startMs: number
     endMs: number
-    publicSlug: string
-    isPublicRevoked: boolean
     lockedById: string | null
     lockedAt: string | null
     createdAt: string
@@ -74,6 +79,15 @@ interface Workspace {
       name: string | null
       plexUsername: string | null
     } | null
+  }>
+  processingJobs?: Array<{
+    id: string
+    type: string
+    status: string
+    progressPercent: number
+    errorText: string | null
+    createdAt: string
+    updatedAt: string
   }>
 }
 
@@ -94,6 +108,9 @@ export default function WorkspaceDetailPage() {
   const [creatingBookmark, setCreatingBookmark] = useState(false)
   const [editingBookmark, setEditingBookmark] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
+  const [downloadingBookmarks, setDownloadingBookmarks] = useState<string[]>([])
+  const [showReprocessDialog, setShowReprocessDialog] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
   
   // Video player state for timeline integration
   const [currentTime, setCurrentTime] = useState(0)
@@ -427,6 +444,105 @@ export default function WorkspaceDetailPage() {
     setEditingLabel("")
   }
 
+  const handleDownloadBookmark = async (bookmarkId: string) => {
+    if (!workspace) return
+
+    try {
+      setDownloadingBookmarks(prev => [...prev, bookmarkId])
+      setError("")
+
+      const response = await fetch("/api/downloads", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookmarkIds: [bookmarkId],
+          workspaceId: workspace.id,
+          bulkDownload: false
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to start download")
+      }
+
+      // Show success message
+      console.log("Download started:", data.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start download")
+    } finally {
+      setDownloadingBookmarks(prev => prev.filter(id => id !== bookmarkId))
+    }
+  }
+
+  const handleBulkDownload = async () => {
+    if (!workspace || workspace.bookmarks.length === 0) return
+
+    try {
+      setError("")
+
+      const response = await fetch("/api/downloads", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookmarkIds: workspace.bookmarks.map(b => b.id),
+          workspaceId: workspace.id,
+          bulkDownload: true
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to start bulk download")
+      }
+
+      console.log("Bulk download started:", data.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start bulk download")
+    }
+  }
+
+  const handleReprocessWorkspace = async (options?: { download?: boolean; convert?: boolean; frames?: boolean }) => {
+    if (!workspace) return
+
+    try {
+      setReprocessing(true)
+      setError("")
+
+      const response = await fetch(`/api/workspaces/${workspace.id}/process`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          download: options?.download ?? true,
+          convert: options?.convert ?? true,
+          frames: options?.frames ?? true,
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to start reprocessing")
+      }
+
+      // Refresh workspace data to show updated processing status
+      await fetchWorkspace()
+      setShowReprocessDialog(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start reprocessing")
+    } finally {
+      setReprocessing(false)
+    }
+  }
+
   // Video player handlers for timeline integration
   const handleVideoSeek = (time: number) => {
     setCurrentTime(time)
@@ -528,8 +644,52 @@ export default function WorkspaceDetailPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Processing Status */}
+              <div className="flex items-center space-x-2">
+                {workspace.processingStatus === "processing" && (
+                  <div className="flex items-center space-x-2 text-blue-600">
+                    <ClockIcon className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Processing... {workspace.processingProgress}%</span>
+                  </div>
+                )}
+                {workspace.processingStatus === "completed" && (
+                  <div className="flex items-center space-x-2 text-green-600">
+                    <CheckCircleIcon className="h-4 w-4" />
+                    <span className="text-sm">Ready</span>
+                  </div>
+                )}
+                {workspace.processingStatus === "failed" && (
+                  <div className="flex items-center space-x-2 text-red-600">
+                    <ExclamationTriangleIcon className="h-4 w-4" />
+                    <span className="text-sm">Processing Failed</span>
+                  </div>
+                )}
+                {workspace.processingStatus === "pending" && (
+                  <div className="flex items-center space-x-2 text-yellow-600">
+                    <ClockIcon className="h-4 w-4" />
+                    <span className="text-sm">Pending</span>
+                  </div>
+                )}
+              </div>
+
               {isProducer && (
                 <>
+                  {workspace.processingStatus !== "processing" && (
+                    <div className="relative">
+                      <details className="group">
+                        <summary className="list-none cursor-pointer text-sm text-blue-500 hover:text-blue-700 flex items-center">
+                          <ArrowPathIcon className="h-4 w-4 mr-1" />
+                          Re-process
+                        </summary>
+                        <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded shadow z-10">
+                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: true })}>Regenerate frames</button>
+                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: true, frames: false })}>Reconvert MP4</button>
+                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: true, convert: false, frames: false })}>Re-download source</button>
+                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => setShowReprocessDialog(true)}>Full re-process…</button>
+                        </div>
+                      </details>
+                    </div>
+                  )}
                   <button className="text-sm text-gray-500 hover:text-gray-700 flex items-center">
                     <PencilIcon className="h-4 w-4 mr-1" />
                     Edit
@@ -544,6 +704,38 @@ export default function WorkspaceDetailPage() {
           </div>
         </div>
       </header>
+
+      {/* Processing Status Notice */}
+      {workspace.processingStatus !== "completed" && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                {workspace.processingStatus === "processing" ? (
+                  <ClockIcon className="h-5 w-5 text-yellow-400 animate-spin" />
+                ) : workspace.processingStatus === "failed" ? (
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+                ) : (
+                  <ClockIcon className="h-5 w-5 text-yellow-400" />
+                )}
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-yellow-700">
+                  {workspace.processingStatus === "processing" && (
+                    <>Workspace is being processed ({workspace.processingProgress}%). Some features may be limited until processing completes.</>
+                  )}
+                  {workspace.processingStatus === "failed" && (
+                    <>Workspace processing failed. Please try re-processing or contact support.</>
+                  )}
+                  {workspace.processingStatus === "pending" && (
+                    <>Workspace processing is pending. Some features may be limited until processing completes.</>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -608,6 +800,7 @@ export default function WorkspaceDetailPage() {
                   isPlaying={isPlaying}
                   onPlayPause={handleVideoPlayPause}
                   onStep={handleVideoStep}
+                  workspaceId={workspace.id}
                 />
               </div>
             </div>
@@ -701,9 +894,20 @@ export default function WorkspaceDetailPage() {
                     <BookmarkIcon className="h-5 w-5 mr-2" />
                     Bookmarks ({workspace.bookmarks.length})
                   </h3>
-                  {creatingBookmark && (
-                    <div className="text-sm text-orange-600">Creating...</div>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    {workspace.processingStatus === "completed" && workspace.bookmarks.length > 0 && (
+                      <button
+                        onClick={handleBulkDownload}
+                        className="text-sm text-green-600 hover:text-green-700 flex items-center"
+                      >
+                        <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                        Download All
+                      </button>
+                    )}
+                    {creatingBookmark && (
+                      <div className="text-sm text-orange-600">Creating...</div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Search and Filter */}
@@ -866,12 +1070,20 @@ export default function WorkspaceDetailPage() {
                                 )}
                               </div>
                               <div className="flex items-center space-x-1">
-                                <button 
-                                  className="text-gray-400 hover:text-gray-600"
-                                  title="Share bookmark"
-                                >
-                                  <ShareIcon className="h-4 w-4" />
-                                </button>
+                                {workspace.processingStatus === "completed" && (
+                                  <button 
+                                    className="text-gray-400 hover:text-green-600"
+                                    title="Download bookmark"
+                                    onClick={() => handleDownloadBookmark(bookmark.id)}
+                                    disabled={downloadingBookmarks.includes(bookmark.id)}
+                                  >
+                                    {downloadingBookmarks.includes(bookmark.id) ? (
+                                      <ClockIcon className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <ArrowDownTrayIcon className="h-4 w-4" />
+                                    )}
+                                  </button>
+                                )}
                                 {canEdit && !bookmark.lockedById && (
                                   <button 
                                     className="text-gray-400 hover:text-blue-600"
@@ -964,6 +1176,43 @@ export default function WorkspaceDetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Reprocess Confirmation Dialog */}
+      {showReprocessDialog && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                <ArrowPathIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mt-4">Re-process Workspace</h3>
+              <div className="mt-2 px-7 py-3">
+                <p className="text-sm text-gray-500">
+                  This will re-download and process the source video file. This may take several minutes. 
+                  Are you sure you want to continue?
+                </p>
+              </div>
+              <div className="items-center px-4 py-3">
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowReprocessDialog(false)}
+                    className="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleReprocessWorkspace}
+                    disabled={reprocessing}
+                    className="px-4 py-2 bg-blue-600 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {reprocessing ? "Processing..." : "Re-process"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

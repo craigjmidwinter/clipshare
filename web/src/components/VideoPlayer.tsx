@@ -881,6 +881,7 @@ export default function VideoPlayer({
             }}
             videoElement={videoRef.current}
             frameRate={30}
+            workspaceId={workspaceId}
           />
         ) : !showTimelineBelow ? (
           <div className="mb-4">

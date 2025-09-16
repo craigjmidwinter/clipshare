@@ -71,22 +71,25 @@ model VerificationToken {
 }
 
 model Workspace {
-  id              String   @id @default(cuid())
-  producerId      String
-  plexKey         String
-  plexServerId    String
-  title           String
-  description     String?
-  contentType     String   // "movie" or "episode"
-  contentTitle    String
-  contentPoster   String?
-  contentDuration Int      // duration in milliseconds
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String   @id @default(cuid())
+  producerId        String
+  plexKey           String
+  plexServerId      String
+  title             String
+  description       String?
+  contentType       String   // "movie" or "episode"
+  contentTitle      String
+  contentPoster     String?
+  contentDuration   Int      // duration in milliseconds
+  processingStatus  String   @default("pending") // "pending", "processing", "completed", "failed"
+  processingProgress Int     @default(0) // progress percentage 0-100
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  producer        User         @relation(fields: [producerId], references: [id], onDelete: Cascade)
-  memberships     Membership[]
-  bookmarks       Bookmark[]
+  producer          User             @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  memberships       Membership[]
+  bookmarks         Bookmark[]
+  processingJobs    ProcessingJob[]
 }
 
 model Membership {
@@ -111,8 +114,6 @@ model Bookmark {
   privateNotes    String?
   startMs         Int      // start time in milliseconds
   endMs           Int      // end time in milliseconds
-  publicSlug      String   @unique @default(cuid())
-  isPublicRevoked Boolean  @default(false)
   lockedById      String?  // User who locked this bookmark (Producer only)
   lockedAt        DateTime? // When bookmark was locked
   createdAt       DateTime @default(now())
@@ -124,13 +125,17 @@ model Bookmark {
 }
 
 model ProcessingJob {
-  id          String   @id @default(cuid())
-  type        String   // "export_clip"
-  status      String   // "pending", "processing", "completed", "failed"
-  payloadJson String   // JSON payload for the job
-  errorText   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  workspaceId   String?
+  type          String   // "workspace_processing", "export_clip", "download_clip"
+  status        String   // "pending", "processing", "completed", "failed"
+  payloadJson   String   // JSON payload for the job
+  errorText     String?
+  progressPercent Int    @default(0) // progress percentage 0-100
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model PlexServer {

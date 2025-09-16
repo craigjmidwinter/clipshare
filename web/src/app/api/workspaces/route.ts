@@ -50,6 +50,11 @@ export async function GET(request: NextRequest) {
               }
             },
             orderBy: { createdAt: "desc" }
+          },
+          processingJobs: {
+            where: { type: "workspace_processing" },
+            orderBy: { createdAt: "desc" },
+            take: 1
           }
         }
       })
@@ -191,6 +196,44 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Start workspace processing automatically
+    const processingJob = await prisma.processingJob.create({
+      data: {
+        workspaceId: workspace.id,
+        type: "workspace_processing",
+        status: "pending",
+        payloadJson: JSON.stringify({
+          plexKey: workspace.plexKey,
+          plexServerId: workspace.plexServerId,
+          contentTitle: workspace.contentTitle
+        }),
+        progressPercent: 0
+      }
+    })
+
+    // Update workspace status to processing
+    await prisma.workspace.update({
+      where: { id: workspace.id },
+      data: {
+        processingStatus: "processing",
+        processingProgress: 0
+      }
+    })
+
+    // Start real background processing
+    const { WorkspaceProcessingService } = await import('@/lib/processing-service')
+    const processingService = WorkspaceProcessingService.getInstance()
+    
+    // Process in background (don't await)
+    processingService.processWorkspace(processingJob.id, {
+      workspaceId: workspace.id,
+      plexKey: workspace.plexKey,
+      plexServerId: workspace.plexServerId,
+      contentTitle: workspace.contentTitle
+    }).catch(error => {
+      console.error('Background processing error:', error)
+    })
+
     // Return the created workspace with full details
     const createdWorkspace = await prisma.workspace.findUnique({
       where: { id: workspace.id },
@@ -218,7 +261,12 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ success: true, workspace: createdWorkspace })
+    return NextResponse.json({ 
+      success: true, 
+      workspace: createdWorkspace,
+      processingStarted: true,
+      jobId: processingJob.id
+    })
   } catch (error) {
     console.error("Error creating workspace:", error)
     return NextResponse.json(

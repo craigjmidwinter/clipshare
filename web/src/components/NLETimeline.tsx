@@ -45,6 +45,7 @@ interface NLETimelineProps {
   onStep: (direction: 'forward' | 'backward', frames: number) => void
   videoElement?: HTMLVideoElement | null
   frameRate?: number
+  workspaceId?: string
 }
 
 export default function NLETimeline({
@@ -59,7 +60,8 @@ export default function NLETimeline({
   onPlayPause,
   onStep,
   videoElement,
-  frameRate = 30
+  frameRate = 30,
+  workspaceId
 }: NLETimelineProps) {
   
   // Debug logging (commented out to prevent console spam)
@@ -95,6 +97,12 @@ export default function NLETimeline({
   
   // Frame preview management
   const { framePreviews, addFramePreview, getFramePreview } = useFramePreviews()
+
+  // Server-provided per-second frames for ribbon
+  const getServerPreviewBySecond = useCallback((second: number) => {
+    if (!workspaceId) return null
+    return `/api/workspaces/${workspaceId}/frames?second=${second}`
+  }, [workspaceId])
   
   // Debug frame previews
   useEffect(() => {
@@ -435,37 +443,52 @@ export default function NLETimeline({
 
   const generateFramePreviews = () => {
     const frames = []
-    const previewInterval = Math.max(1, Math.floor(30 / zoom)) // Show every Nth frame based on zoom
+    // Choose a seconds-per-thumb that keeps tiles around ~96px wide
+    const pixelsPerSecond = isFinite(frameRate * frameWidth * zoom) && frameRate * frameWidth * zoom > 0 ? frameRate * frameWidth * zoom : 1
+    const targetTilePx = 96
+    const rawSeconds = Math.max(0.25, targetTilePx / pixelsPerSecond)
+    // snap to nice steps
+    const steps = [0.25, 0.5, 1, 2, 5, 10, 30, 60]
+    const secondsPerThumb = steps.reduce((prev, curr) => Math.abs(curr - rawSeconds) < Math.abs(prev - rawSeconds) ? curr : prev, steps[0])
     
     // Calculate visible frame range based on scroll position and zoom
     const containerWidth = timelineRef.current?.clientWidth || 1000
-    const pixelsPerFrame = isFinite(frameWidth * zoom) && frameWidth * zoom > 0 ? frameWidth * zoom : 1
-    
-    const startFrame = Math.max(0, Math.floor(scrollPosition / pixelsPerFrame))
-    const endFrame = Math.min(duration * frameRate, Math.ceil((scrollPosition + containerWidth) / pixelsPerFrame))
-    
-    for (let frame = startFrame; frame <= endFrame; frame += previewInterval) {
-      if (frame >= 0 && frame < duration * frameRate) {
-        const time = frame / frameRate
-        const position = timeToPosition(time)
-        const framePreview = getFramePreview(frame)
+    const startSecond = Math.max(0, Math.floor(scrollPosition / pixelsPerSecond))
+    const endSecond = Math.min(Math.ceil(duration), Math.ceil((scrollPosition + containerWidth) / pixelsPerSecond))
+    const stepSeconds = Math.max(1, Math.round(secondsPerThumb))
+
+    for (let sec = Math.floor(startSecond); sec <= endSecond; sec += stepSeconds) {
+      if (sec >= 0 && sec <= duration) {
+        // Place tile aligned to exact second to keep correlation
+        const tileWidth = Math.max(24, Math.min(192, Math.floor(pixelsPerSecond * stepSeconds)))
+        const position = timeToPosition(sec)
+        const nearestSecond = Math.max(0, Math.round(sec))
+        const frameForCache = Math.floor(nearestSecond * frameRate)
+        const dataUrl = getFramePreview(frameForCache)
+        const serverUrl = getServerPreviewBySecond(nearestSecond)
         
         frames.push(
           <div
-            key={frame}
-            className="absolute top-0 h-full bg-gray-600 border-r border-gray-500"
+            key={`sec-${sec}`}
+            className="absolute top-0 h-full bg-gray-700 border-r border-gray-600 overflow-hidden"
             style={{ 
               left: position,
-              width: Math.max(1, isFinite(frameWidth * zoom) ? frameWidth * zoom : 1)
+              width: tileWidth
             }}
-            title={`Frame ${frame} - ${formatTimecode(time)}`}
+            title={formatTimecode(sec)}
           >
-            {framePreview ? (
+            {dataUrl ? (
               <img
-                src={framePreview}
-                alt={`Frame ${frame}`}
-                className="w-full h-full object-cover opacity-80"
-                style={{ width: Math.max(1, isFinite(frameWidth * zoom) ? frameWidth * zoom : 1) }}
+                src={dataUrl}
+                alt={`t=${nearestSecond}s`}
+                className="w-full h-full object-cover opacity-90"
+              />
+            ) : serverUrl ? (
+              <img
+                src={serverUrl}
+                alt={`t=${nearestSecond}s`}
+                className="w-full h-full object-cover opacity-90"
+                loading="lazy"
               />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-500 to-gray-700 opacity-60" />

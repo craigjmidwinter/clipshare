@@ -2,13 +2,12 @@
 
 ## Overview
 
-Clipshare is an internal collaboration tool that allows teams to work together on video content from Plex libraries. Users can create workspaces around specific episodes or movies, collaborate on bookmarking with public/private notes, and share clips publicly.
+Clipshare is an internal collaboration tool that allows teams to work together on video content from Plex libraries. Users can create workspaces around specific episodes or movies, collaborate on bookmarking with public/private notes, and download clips for offline use and sharing.
 
 ## Roles
 
 - **Producer**: Creates workspaces around Plex content, manages collaborators, exports clips
-- **Collaborator**: Views assigned workspaces, creates bookmarks with notes, shares clip links
-- **Anonymous viewer**: Opens public clip links without authentication
+- **Collaborator**: Views assigned workspaces, creates bookmarks with notes, downloads clips
 
 ## Core Stories
 
@@ -137,25 +136,33 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - WebSocket channels broadcast bookmark.created, bookmark.updated, bookmark.deleted, bookmark.locked/unlocked
   - Frontend should debounce rapid In/Out adjustments to avoid overwhelming updates
   - Export flow (Post-Production / OBS Package) reads these ranges directly for clip cutting
+  - Workspace processing: download source from Plex → convert to MP4 H.264 → generate preview frames → enable full functionality
+  - Processing status: 'pending', 'processing', 'completed', 'failed' with progress percentage
+  - Re-processing clears existing processed files and restarts the workflow
 
-### 5) Public Clip Sharing
-- As a collaborator, I can share public links to specific bookmarked clips that others can view and download.
+### 5) Workspace Clip Downloads
+- As a collaborator, I can download clips/bookmarks from the workspace as MP4 H.264 video files for offline use and sharing.
 - **Acceptance Criteria**
-  - Each bookmark gets an unguessable `public_slug`
-  - Public `/clip/:slug` page plays only the bookmarked section
-  - Seeking beyond bookmark boundaries disabled
-  - Clip metadata display (title, duration, creator attribution)
-  - Public viewers can download the clip as a video file
-  - Producer can revoke public access to any clip
+  - Source video file downloaded and processed during workspace creation
+  - Background processing generates MP4 H.264 files at highest available quality
+  - Preview frame generation included in background processing
+  - Workspace functionality limited until processing completes
+  - Download button available on each bookmark for workspace members
+  - Download generates video file containing only the bookmarked section (start_ms to end_ms)
+  - Filename includes workspace name, content title, bookmark label, and timestamp
+  - Producer can download all bookmarks in bulk
+  - Producer can re-process workspace files using dedicated button
+  - Downloads respect workspace permissions (only members can download)
 - **UI Requirements**
-  - Share button on each bookmark with copy-to-clipboard
-  - Public clip page with minimal, clean design
-  - Auto-playing video player with disabled seeking controls
-  - Download button for public viewers to save clip locally
-  - Clip metadata display (title, duration, creator attribution)
-  - Social sharing buttons (Twitter, Facebook, LinkedIn)
-  - Mobile-optimized responsive design
-  - Loading states and error handling for revoked/invalid clips
+  - Workspace creation shows processing progress with status indicators
+  - Limited functionality notice during processing (disabled bookmark creation, etc.)
+  - Download button on each bookmark (single format, highest quality)
+  - Bulk download interface for Producers
+  - Producer re-processing button with confirmation dialog
+  - Progress indicators during download processing and re-processing
+  - Error handling for failed processing with retry options
+  - Mobile-optimized download interface
+  - Accessibility: keyboard navigation, screen reader support for download controls
 
 ### 6) Clip Export for Post-Production
 - As a Producer, I can export bookmarked clips as video files.
@@ -179,20 +186,19 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - `/welcome` (simple onboarding)
   - `/workspaces` (dashboard: workspaces, recent activity)
   - `/workspace/:id` (workspace detail with video player)
-  - `/clip/:slug` (public clip viewing)
-- **Player**: HLS-first; keyboard shortcuts; bookmarks sidebar; share/export modals
+- **Player**: HLS-first; keyboard shortcuts; bookmarks sidebar; download/export modals
 
 ### Backend (Node.js + SQLite + Prisma)
 - **Database**: SQLite with Prisma ORM
-- **File Storage**: Local filesystem for exported clips
+- **File Storage**: Local filesystem for downloaded clips and exports
 - **Authentication**: NextAuth.js with Plex OAuth provider
 - **API Routes**: Next.js API routes for backend logic
 - **Database tables**
   - `users` (id, plex_user_id, plex_username, plex_email, plex_avatar_url, onboarding_completed, created_at, updated_at)
-  - `workspaces` (id, producer_id, plex_key, plex_server_id, title, description, content_type, content_title, content_poster, content_duration, created_at, updated_at)
+  - `workspaces` (id, producer_id, plex_key, plex_server_id, title, description, content_type, content_title, content_poster, content_duration, processing_status, processing_progress, created_at, updated_at)
   - `memberships` (id, workspace_id, user_id, role, created_at)
-  - `bookmarks` (id, workspace_id, created_by, label, public_notes, private_notes, start_ms, end_ms, public_slug, is_public_revoked, created_at, updated_at)
-  - `processing_jobs` (id, type, status, payload_json, error_text, created_at, updated_at)
+  - `bookmarks` (id, workspace_id, created_by, label, public_notes, private_notes, start_ms, end_ms, locked_by, locked_at, created_at, updated_at)
+  - `processing_jobs` (id, workspace_id, type, status, payload_json, error_text, progress_percent, created_at, updated_at)
   - `plex_servers` (id, user_id, server_url, token, name, last_sync_at, status, created_at, updated_at)
   - `plex_config` (id, client_id, client_secret, server_url, server_token, is_active, created_at, updated_at)
   - `onboarding_sessions` (id, user_id, current_step, completed_steps, wizard_data_json, created_at, updated_at)
@@ -204,8 +210,9 @@ Clipshare is an internal collaboration tool that allows teams to work together o
 - `/api/plex/config` → manage Plex API credentials (welcome wizard)
 - `/api/plex/connect` → validate Plex server connection and fetch libraries
 - `/api/workspaces` → CRUD operations for workspaces
+- `/api/workspaces/[id]/process` → trigger workspace processing/re-processing
 - `/api/bookmarks` → CRUD operations for bookmarks
-- `/api/clips/[slug]` → public clip access (no auth)
+- `/api/downloads` → trigger clip download jobs
 - `/api/export` → trigger clip export jobs
 
 ## Development Setup
@@ -255,11 +262,13 @@ PLEX_SERVER_TOKEN="your-plex-server-token"
 ## MVP Definition of Done
 
 - Users authenticate via NextAuth.js with Plex OAuth (primary) or email/password (fallback)
-- Producer can create workspaces from Plex episodes/movies
-- Collaborators can create bookmarks with public/private notes
-- Public clip sharing works without authentication
+- Producer can create workspaces from Plex episodes/movies with background processing
+- Workspace processing downloads source files and converts to MP4 H.264 with preview frames
+- Collaborators can create bookmarks with public/private notes (after processing completes)
 - Producer can export clips for post-production
-- Application-level permissions restrict access appropriately; revocation supported for clips
+- Workspace members can download clips for offline use
+- Producer can re-process workspace files when needed
+- Application-level permissions restrict access appropriately
 - **UI Requirements Met**:
   - All features have intuitive, accessible interfaces
   - Responsive design works on desktop (primary) and mobile
