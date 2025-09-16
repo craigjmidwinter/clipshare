@@ -206,6 +206,19 @@ export async function PUT(
       }
     })
 
+    // Maintain derived clip file when time range changes: debounce and queue generation
+    try {
+      const wsId = existingBookmark.workspaceId
+      const startChanged = startMs !== undefined && startMs !== existingBookmark.startMs
+      const endChanged = endMs !== undefined && endMs !== existingBookmark.endMs
+      if (startChanged || endChanged) {
+        const { scheduleClipGeneration } = await import('@/lib/clip-jobs')
+        await scheduleClipGeneration({ id, workspaceId: wsId, startMs: bookmark.startMs, endMs: bookmark.endMs })
+      }
+    } catch (e) {
+      console.warn('Failed to schedule clip after bookmark change', e)
+    }
+
     return NextResponse.json({ success: true, bookmark })
   } catch (error) {
     console.error("Error updating bookmark:", error)

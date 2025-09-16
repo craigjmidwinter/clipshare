@@ -109,6 +109,7 @@ export default function WorkspaceDetailPage() {
   const [editingBookmark, setEditingBookmark] = useState<string | null>(null)
   const [editingLabel, setEditingLabel] = useState("")
   const [downloadingBookmarks, setDownloadingBookmarks] = useState<string[]>([])
+  const [clipProgress, setClipProgress] = useState<Record<string, { status: string; progress: number }>>({})
   const [showReprocessDialog, setShowReprocessDialog] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   
@@ -451,28 +452,24 @@ export default function WorkspaceDetailPage() {
       setDownloadingBookmarks(prev => [...prev, bookmarkId])
       setError("")
 
-      const response = await fetch("/api/downloads", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          bookmarkIds: [bookmarkId],
-          workspaceId: workspace.id,
-          bulkDownload: false
-        })
-      })
+      console.log("Starting individual download for bookmark:", bookmarkId)
 
-      const data = await response.json()
+      // Direct download - no job creation needed since clips are pre-generated
+      const downloadUrl = `/api/workspaces/${workspace.id}/clips/${bookmarkId}/download`
+      
+      // Create temporary link and trigger download
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = '' // Let the server set the filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
-      if (!data.success) {
-        throw new Error(data.error || "Failed to start download")
-      }
+      console.log("Download link clicked for:", downloadUrl)
 
-      // Show success message
-      console.log("Download started:", data.message)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start download")
+      console.error("Individual download error:", err)
+      setError(err instanceof Error ? err.message : "Failed to download clip")
     } finally {
       setDownloadingBookmarks(prev => prev.filter(id => id !== bookmarkId))
     }
@@ -484,27 +481,52 @@ export default function WorkspaceDetailPage() {
     try {
       setError("")
 
-      const response = await fetch("/api/downloads", {
-        method: "POST",
+      console.log("Starting bulk download for workspace:", workspace.id)
+
+      // Create ZIP download via POST request
+      const response = await fetch(`/api/workspaces/${workspace.id}/clips/bulk-download`, {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          bookmarkIds: workspace.bookmarks.map(b => b.id),
-          workspaceId: workspace.id,
-          bulkDownload: true
-        })
       })
 
-      const data = await response.json()
+      console.log("Bulk download response status:", response.status)
+      console.log("Bulk download response headers:", Object.fromEntries(response.headers.entries()))
 
-      if (!data.success) {
-        throw new Error(data.error || "Failed to start bulk download")
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error("Bulk download error:", errorData)
+        throw new Error(errorData.error || 'Failed to create bulk download')
       }
 
-      console.log("Bulk download started:", data.message)
+      // Check if response is actually a ZIP file
+      const contentType = response.headers.get('content-type')
+      console.log("Response content type:", contentType)
+
+      if (contentType !== 'application/zip') {
+        const text = await response.text()
+        console.error("Expected ZIP but got:", text)
+        throw new Error('Server returned non-ZIP response')
+      }
+
+      // Get the ZIP file blob
+      const blob = await response.blob()
+      console.log("ZIP blob size:", blob.size)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${workspace.title.replace(/[^a-zA-Z0-9-_]/g, '_')}_clips.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start bulk download")
+      console.error("Bulk download error:", err)
+      setError(err instanceof Error ? err.message : "Failed to create bulk download")
     }
   }
 
@@ -1162,9 +1184,11 @@ export default function WorkspaceDetailPage() {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs text-gray-400">
-                                {new Date(bookmark.createdAt).toLocaleDateString()}
-                              </span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-gray-400">
+                                  {new Date(bookmark.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         )

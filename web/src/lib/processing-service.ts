@@ -85,6 +85,8 @@ export class WorkspaceProcessingService {
         console.log('Step 3: Generating preview frames...')
         await this.generatePreviewFrames(mp4FilePath, workspaceId, jobId)
       }
+      // Generate clips for bookmarks after frames
+      await this.generateClipsForBookmarks(mp4FilePath, workspaceId)
       await this.updateJobProgress(jobId, 100)
       await this.updateWorkspaceProgress(workspaceId, 100)
 
@@ -327,6 +329,47 @@ export class WorkspaceProcessingService {
         reject(error)
       })
     })
+  }
+
+  private async generateClipsForBookmarks(mp4FilePath: string, workspaceId: string): Promise<void> {
+    const clipsDir = path.join(process.cwd(), 'processed-files', workspaceId, 'clips')
+    await fs.mkdir(clipsDir, { recursive: true })
+
+    const bookmarks = await prisma.bookmark.findMany({
+      where: { workspaceId },
+      select: { id: true, startMs: true, endMs: true }
+    })
+
+    const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
+      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+      p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)))
+      p.on('error', reject)
+    })
+
+    for (const b of bookmarks) {
+      try {
+        const outPath = path.join(clipsDir, `${b.id}.mp4`)
+        // Skip if already exists
+        try {
+          await fs.stat(outPath)
+          continue
+        } catch {}
+
+        const startSec = Math.max(0, b.startMs / 1000)
+        const endSec = Math.max(startSec + 0.1, b.endMs / 1000)
+        const duration = Math.max(0.1, endSec - startSec)
+
+        // Try stream copy first
+        try {
+          await runFfmpeg(['-ss', String(startSec), '-i', mp4FilePath, '-t', String(duration), '-c', 'copy', '-movflags', '+faststart', '-y', outPath])
+        } catch {
+          // Fallback re-encode
+          await runFfmpeg(['-ss', String(startSec), '-i', mp4FilePath, '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', outPath])
+        }
+      } catch (e) {
+        console.warn('clip generation failed for bookmark', b.id, e)
+      }
+    }
   }
 
   private async cleanupSourceFile(sourceFilePath: string): Promise<void> {

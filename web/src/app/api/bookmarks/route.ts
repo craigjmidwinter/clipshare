@@ -155,6 +155,14 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Schedule clip generation for new bookmark (debounced)
+    try {
+      const { scheduleClipGeneration } = await import('@/lib/clip-jobs')
+      await scheduleClipGeneration({ id: bookmark.id, workspaceId, startMs, endMs })
+    } catch (e) {
+      console.warn('Failed to schedule clip for new bookmark', e)
+    }
+
     return NextResponse.json({ success: true, bookmark })
   } catch (error) {
     console.error("Error creating bookmark:", error)
@@ -300,9 +308,19 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete the bookmark
-    await prisma.bookmark.delete({
-      where: { id }
-    })
+    await prisma.bookmark.delete({ where: { id } })
+
+    // Remove clip and cancel jobs
+    try {
+      const { deleteClipForBookmark } = await import('@/lib/clip-jobs')
+      await deleteClipForBookmark(existingBookmark.workspaceId, id)
+      await prisma.processingJob.updateMany({
+        where: { type: 'export_clip', payloadJson: { contains: `"bookmarkId":"${id}"` }, status: { in: ['pending','processing'] } },
+        data: { status: 'cancelled', errorText: 'Bookmark deleted' }
+      })
+    } catch (e) {
+      console.warn('Failed to cleanup clip for deleted bookmark', e)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

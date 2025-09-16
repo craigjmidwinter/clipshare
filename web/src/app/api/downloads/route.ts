@@ -105,48 +105,23 @@ export async function POST(request: NextRequest) {
       )
     )
 
-    // Start real background clip cutting using processed workspace MP4
-    downloadJobs.forEach(async (job) => {
+    // If clips are pre-generated, just mark jobs completed and return file paths
+    const workspaceDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const clipsDir = path.join(workspaceDir, 'clips')
+    await fs.mkdir(clipsDir, { recursive: true })
+
+    for (const job of downloadJobs) {
       try {
-        await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'processing', progressPercent: 0 } })
-
-        // Load job payload
-        const payload = JSON.parse(job.payloadJson) as { bookmarkId: string; startMs: number; endMs: number; bookmarkLabel: string | null }
-
-        const workspaceDir = path.join(process.cwd(), 'processed-files', workspaceId)
-        const sourcePath = path.join(workspaceDir, 'processed.mp4')
-        const clipsDir = path.join(workspaceDir, 'clips')
-        await fs.mkdir(clipsDir, { recursive: true })
-
+        const payload = JSON.parse(job.payloadJson) as { bookmarkId: string }
         const outPath = path.join(clipsDir, `${payload.bookmarkId}.mp4`)
-
-        const startSec = Math.max(0, (payload.startMs || 0) / 1000)
-        const endSec = Math.max(startSec, (payload.endMs || payload.startMs + 1000) / 1000)
-        const duration = Math.max(0.1, endSec - startSec)
-
-        // Try stream copy first (fast) then fallback to transcode
-        const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
-          const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-          p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)))
-          p.on('error', reject)
-        })
-
-        // 1) attempt copy
-        try {
-          await runFfmpeg(['-ss', String(startSec), '-i', sourcePath, '-t', String(duration), '-c', 'copy', '-movflags', '+faststart', '-y', outPath])
-        } catch {
-          // 2) fallback encode
-          await runFfmpeg(['-ss', String(startSec), '-i', sourcePath, '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', outPath])
-        }
-
-        await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'completed', progressPercent: 100 } })
-      } catch (error) {
-        console.error('clip download failed', error)
-        await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'failed', errorText: error instanceof Error ? error.message : 'error' } })
+        await fs.stat(outPath)
+        await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'completed', progressPercent: 100, errorText: null } })
+      } catch {
+        await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'failed', errorText: 'Clip not ready' } })
       }
-    })
+    }
 
-    return NextResponse.json({ success: true, message: bulkDownload ? 'Bulk download started' : 'Download started', jobIds: downloadJobs.map(j => j.id) })
+    return NextResponse.json({ success: true, message: 'Checked clip readiness', jobIds: downloadJobs.map(j => j.id) })
   } catch (error) {
     console.error("Error starting download:", error)
     return NextResponse.json(
