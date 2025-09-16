@@ -178,6 +178,112 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - Export settings modal (quality, format, naming convention)
   - Export history with re-download capabilities
 
+### 7) OBS VTR Integration for Live Production
+- As a Producer, I can export all bookmarked clips from all collaborators in a workspace and generate an OBS-compatible package that allows me to trigger clips during live recording with VTR-like functionality.
+- **Acceptance Criteria**
+  - Export all bookmarks from all collaborators in a workspace as individual MP4 files
+  - Generate a structured folder hierarchy with consistent naming conventions
+  - Include metadata files (JSON/XML) with clip information (timing, labels, creator)
+  - Create OBS-ready scene collection file (.json) with pre-configured media sources
+  - Generate automatic hotkey configuration for OBS Studio
+  - Create web-based UI interface for visual clip triggering in OBS
+  - Include comprehensive setup guide for OBS integration
+- **UI Requirements**
+  - **Export Modal**
+    - Package Settings: Export format selection (MP4 H.264, ProRes, etc.), Quality settings (1080p, 720p, etc.), Naming convention options
+    - Collaborator Filter: Include/exclude specific collaborators from export
+    - Hotkey Pattern Selection: Sequential (F1-F12, Ctrl+F1-F12...), Creator-based grouping, Time-based grouping
+    - Web Interface Preview: Show generated button layout and styling options
+    - Package Preview: List of all clips with thumbnails, metadata summary, file size estimates
+  - **Export Queue Interface**
+    - Progress tracking for each clip being exported with individual status indicators
+    - Overall package generation progress with ETA
+    - Error handling with retry options for failed clips
+    - Download link when package is ready with file size and completion timestamp
+  - **OBS Setup Guide**
+    - Step-by-step instructions for importing the package into OBS Studio
+    - Hotkey configuration walkthrough with visual guides
+    - Web interface setup instructions for browser source
+    - Troubleshooting common issues and FAQ
+    - Video tutorial integration with embedded guides
+- **Technical Requirements**
+  - **API Endpoints**
+    - `POST /api/workspaces/[id]/export/obs-package` - Generate OBS package with all clips and configuration
+    - `GET /api/workspaces/[id]/export/obs-package/[jobId]` - Check export status and progress
+    - `GET /api/workspaces/[id]/export/obs-package/[jobId]/download` - Download complete package as ZIP
+  - **Generated Package Structure**
+    ```
+    workspace-name_obs-package/
+    ├── clips/
+    │   ├── workspace-content-bookmark1.mp4
+    │   ├── workspace-content-bookmark2.mp4
+    │   └── ...
+    ├── metadata/
+    │   ├── clips.json (clip timing, labels, creator info)
+    │   ├── workspace-info.json (workspace metadata)
+    │   └── hotkeys.json (OBS hotkey configuration)
+    ├── web-interface/
+    │   ├── index.html (OBS browser source interface)
+    │   ├── style.css (OBS-optimized styling)
+    │   ├── script.js (clip triggering logic)
+    │   └── thumbnails/ (preview images for each clip)
+    ├── obs/
+    │   ├── scene-collection.json (OBS scene collection)
+    │   ├── media-sources.json (pre-configured media sources)
+    │   └── browser-source.json (web interface configuration)
+    └── README.md (comprehensive setup guide)
+    ```
+  - **Web Interface Features**
+    - Responsive grid layout optimized for OBS browser source
+    - Visual thumbnails for each clip with hover previews
+    - Clip metadata display (duration, creator, label, timecode)
+    - One-click playback with visual feedback (button highlights when playing)
+    - Keyboard shortcut overlay showing assigned hotkeys
+    - Compact mode for small OBS windows with collapsible sections
+    - Real-time status indicators (playing, queued, ready)
+    - Customizable themes (dark/light) to match OBS interface
+  - **Automatic Hotkey Generation**
+    - Sequential assignment: F1-F12, Ctrl+F1-F12, Alt+F1-F12, Shift+F1-F12
+    - Creator-based grouping: Producer gets F1-F4, Collaborators get Ctrl+F1-F4...
+    - Time-based grouping: Early clips get F1-F4, Later clips get Ctrl+F1-F4...
+    - Smart conflict detection with OBS defaults and system hotkeys
+    - Customizable patterns with preview of assigned hotkeys
+    - Generated OBS hotkey configuration file for import
+  - **OBS Integration Files**
+    - Scene Collection: Pre-configured scenes with media sources and web interface
+    - Media Sources: Each clip as separate source with proper audio/video settings
+    - Browser Source: Pre-configured web interface with correct dimensions and settings
+    - Hotkey Config: JSON file for OBS hotkey import with custom labels
+    - Metadata Integration: Clip information accessible in OBS browser sources
+- **Advanced Features**
+  - **Live Production Enhancements**
+    - Clip transitions: Pre-configured transitions between clips
+    - Audio levels: Consistent audio normalization across all clips
+    - Color correction: Basic color matching between clips from different sources
+    - Lower thirds: Optional text overlays with clip labels and creator info
+    - Queue management: Ability to queue clips for sequential playback
+  - **Workflow Integration**
+    - Template system: Save export settings as reusable templates
+    - Batch operations: Export multiple workspaces simultaneously
+    - Version control: Track different export versions with changelog
+    - Collaboration: Share export packages with team members
+    - Auto-update: Regenerate package when workspace bookmarks change
+  - **Performance Optimization**
+    - Background processing with progress tracking
+    - Efficient thumbnail generation using ffmpeg
+    - Optimized web interface for minimal CPU usage in OBS
+    - Compressed package delivery with incremental updates
+- **User Experience Flow**
+  1. Producer clicks "Export for OBS" button in workspace
+  2. Export Modal opens with package configuration options
+  3. Producer selects clips, settings, hotkey patterns, and web interface theme
+  4. Background processing generates all clips, thumbnails, and OBS files
+  5. Download package becomes available when complete with progress summary
+  6. Producer downloads ZIP file and follows comprehensive setup guide
+  7. OBS import loads scene collection, media sources, and web interface
+  8. Live production uses both hotkeys and visual buttons to trigger clips
+  9. Web interface provides real-time feedback and status updates during live recording
+
 ## Technical Architecture
 
 ### Frontend (Next.js + TypeScript + Tailwind)

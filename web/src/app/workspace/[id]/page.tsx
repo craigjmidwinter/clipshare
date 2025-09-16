@@ -28,6 +28,7 @@ import {
 } from "@heroicons/react/24/outline"
 import VideoPlayer from "@/components/VideoPlayer"
 import NLETimeline from "@/components/NLETimeline"
+import OBSExportModal from "@/components/OBSExportModal"
 
 interface Workspace {
   id: string
@@ -112,6 +113,7 @@ export default function WorkspaceDetailPage() {
   const [clipProgress, setClipProgress] = useState<Record<string, { status: string; progress: number }>>({})
   const [showReprocessDialog, setShowReprocessDialog] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [showOBSExportModal, setShowOBSExportModal] = useState(false)
   
   // Video player state for timeline integration
   const [currentTime, setCurrentTime] = useState(0)
@@ -918,13 +920,33 @@ export default function WorkspaceDetailPage() {
                   </h3>
                   <div className="flex items-center space-x-2">
                     {workspace.processingStatus === "completed" && workspace.bookmarks.length > 0 && (
-                      <button
-                        onClick={handleBulkDownload}
-                        className="text-sm text-green-600 hover:text-green-700 flex items-center"
-                      >
-                        <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
-                        Download All
-                      </button>
+                      <>
+                        <button
+                          onClick={handleBulkDownload}
+                          className="text-sm text-green-600 hover:text-green-700 flex items-center"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                          Download All
+                        </button>
+                        {isProducer && (
+                          <>
+                            <button
+                              onClick={() => router.push(`/workspace/${workspaceId}/vtr`)}
+                              className="text-sm text-purple-600 hover:text-purple-700 flex items-center"
+                            >
+                              <PlayIcon className="h-4 w-4 mr-1" />
+                              VTR Control
+                            </button>
+                            <button
+                              onClick={() => setShowOBSExportModal(true)}
+                              className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                            >
+                              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                              Export for OBS
+                            </button>
+                          </>
+                        )}
+                      </>
                     )}
                     {creatingBookmark && (
                       <div className="text-sm text-orange-600">Creating...</div>
@@ -1237,6 +1259,15 @@ export default function WorkspaceDetailPage() {
           </div>
         </div>
       )}
+
+      {/* OBS Export Modal */}
+      <OBSExportModal
+        isOpen={showOBSExportModal}
+        onClose={() => setShowOBSExportModal(false)}
+        workspaceId={workspaceId}
+        workspaceTitle={workspace?.title || ''}
+        bookmarkCount={workspace?.bookmarks.length || 0}
+      />
     </div>
   )
 }
