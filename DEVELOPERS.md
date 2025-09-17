@@ -1,13 +1,34 @@
-# Clipshare Developer Documentation
+# [Clipshare](https://github.com/craigjmidwinter/clipshare) Developer Documentation
+
+[![GitHub Stars](https://img.shields.io/github/stars/craigjmidwinter/clipshare.svg?color=blue&labelColor=555555&logoColor=ffffff&style=for-the-badge&logo=github)](https://github.com/craigjmidwinter/clipshare)
+[![GitHub Release](https://img.shields.io/github/release/craigjmidwinter/clipshare.svg?color=blue&labelColor=555555&logoColor=ffffff&style=for-the-badge&logo=github)](https://github.com/craigjmidwinter/clipshare/releases)
 
 **Comprehensive guide for developers working on Clipshare - the professional video collaboration platform with Plex integration.**
 
 This document covers everything you need to know to develop, test, and deploy Clipshare.
 
-## 🛠️ Technology Stack
+## Supported Development Platforms
 
+Clipshare development is supported on the following platforms:
+
+| Platform | Available | Description |
+| :----: | :----: |--- |
+| Linux | ✅ | Primary development platform |
+| macOS | ✅ | Full development support |
+| Windows | ✅ | Via WSL2 or native Node.js |
+| Docker | ✅ | Containerized development environment |
+
+## Development Environment Requirements
+
+Before starting development, ensure you have:
+
+- **Node.js 20+** (verified: v20.19.5)
+- **npm 10+** (verified: v10.8.2) 
+- **Git** for version control
+- **Plex Media Server** for testing integration (optional)
+
+## Technology Stack
 ### **Frontend**
-- **Next.js 15.5.3** with App Router and React Server Components
 - **TypeScript** for type safety and developer experience
 - **Tailwind CSS** for modern, responsive styling
 - **React Testing Library** for component testing

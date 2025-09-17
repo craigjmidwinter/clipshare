@@ -1,13 +1,73 @@
-# Clipshare
+# [Clipshare](https://github.com/craigjmidwinter/clipshare)
 
-**Professional video collaboration platform with Plex integration for teams, content creators, and live production workflows.**
+[![GitHub Stars](https://img.shields.io/github/stars/craigjmidwinter/clipshare.svg?color=blue&labelColor=555555&logoColor=ffffff&style=for-the-badge&logo=github)](https://github.com/craigjmidwinter/clipshare)
+[![GitHub Release](https://img.shields.io/github/release/craigjmidwinter/clipshare.svg?color=blue&labelColor=555555&logoColor=ffffff&style=for-the-badge&logo=github)](https://github.com/craigjmidwinter/clipshare/releases)
+
+[Clipshare](https://github.com/craigjmidwinter/clipshare) is a professional video collaboration platform with Plex integration for teams, content creators, and live production workflows.
+
+[![clipshare](https://img.shields.io/badge/Clipshare-Video_Collaboration-blue?style=for-the-badge&logo=video)](https://github.com/craigjmidwinter/clipshare)
 
 Clipshare enables teams to collaborate on video content directly from Plex media libraries, create frame-accurate bookmarks, and generate professional OBS packages for live streaming and recording.
 
-## ✨ Key Features
+## Supported Platforms
 
+Clipshare is built with Next.js and supports multiple deployment options:
+
+| Platform | Available | Description |
+| :----: | :----: |--- |
+| Web Application | ✅ | Browser-based interface for all features |
+| Docker | ✅ | Containerized deployment with Docker Compose |
+| Node.js | ✅ | Direct Node.js deployment on servers |
+
+## Application Setup
+
+Access the web interface at `http://localhost:3000` after starting the application. Configure your Plex server connection in the admin setup wizard on first launch.
+
+For detailed setup instructions, see the **[Getting Started Guide](./docs/GETTING_STARTED.md)**.
+
+## Quick Start
+
+>[!NOTE]
+>For development setup, see the **[Developer Documentation](./DEVELOPERS.md)**.
+
+### Using Docker (Recommended)
+
+```yaml
+---
+services:
+  clipshare:
+    build: .
+    container_name: clipshare
+    environment:
+      - PLEX_CLIENT_ID=your-client-id
+      - NEXTAUTH_SECRET=your-secret-key
+    ports:
+      - 3000:3000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+```
+
+### Manual Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/craigjmidwinter/clipshare.git
+cd clipshare/web
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp env.example .env.local
+# Edit .env.local with your configuration
+
+# Start the application
+npm run dev
+```
+
+## ✨ Key Features
 ### 🎬 **Video Collaboration**
-- **Real-time collaboration** on video content with team members
 - **Frame-accurate bookmarking** with millisecond precision
 - **Public and private notes** for team communication and personal workflow
 - **Producer and collaborator roles** with appropriate permissions
@@ -30,41 +90,99 @@ Clipshare enables teams to collaborate on video content directly from Plex media
 - **Granular permissions** and access control
 - **Seamless onboarding** through Plex authentication
 
-## 🚀 Quick Start
+## Configuration
 
-### For Users
-1. **[Getting Started Guide](./docs/GETTING_STARTED.md)** - 5-minute setup for new users
-2. **[User Guide](./docs/USER_GUIDE.md)** - Complete user manual and workflows
-3. **[OBS Integration Guide](./docs/OBS_INTEGRATION.md)** - Professional live production setup
+Configure Clipshare through environment variables in `.env.local`:
 
-### For Developers
-**[👨‍💻 Developer Documentation](./DEVELOPERS.md)** - Complete guide for developers including setup, API reference, testing, and contributing
+| Parameter | Function |
+| :----: | --- |
+| `NEXTAUTH_URL` | Base URL for the application (e.g., `http://localhost:3000`) |
+| `NEXTAUTH_SECRET` | Secret key for authentication sessions |
+| `PLEX_CLIENT_ID` | Plex client ID for authentication |
+| `PLEX_SERVER_URL` | Your Plex server URL (optional, can be set via UI) |
+| `PLEX_SERVER_TOKEN` | Your Plex server token (optional, can be set via UI) |
+| `DATABASE_URL` | Database connection string (defaults to SQLite) |
 
-## 📖 Documentation
+## Environment Variables from Files
 
-### **User Documentation**
-Our comprehensive user-focused documentation:
+You can set any environment variable from a file by using a special prepend `FILE__`.
 
-| Documentation | Description |
-|---------------|-------------|
-| **[📚 Documentation Index](./docs/README.md)** | Complete guide to all documentation |
-| **[🚀 Getting Started](./docs/GETTING_STARTED.md)** | Quick start guide for new users |
-| **[📖 User Guide](./docs/USER_GUIDE.md)** | Comprehensive user manual |
-| **[🎬 OBS Integration](./docs/OBS_INTEGRATION.md)** | Professional live production setup |
-| **[❓ FAQ](./docs/FAQ.md)** | Frequently asked questions |
+As an example:
 
-### **Developer Documentation**
-| Documentation | Description |
-|---------------|-------------|
-| **[👨‍💻 Developer Guide](./DEVELOPERS.md)** | Complete developer documentation and setup |
-| **[🛠️ Development Setup](./docs/DEVELOPMENT.md)** | Detailed development environment setup |
-| **[🔌 API Reference](./docs/API.md)** | Complete REST API documentation |
-| **[🧪 Testing Guide](./docs/TESTING.md)** | Testing strategies and guidelines |
-| **[🏗️ Architecture](./docs/ARCHITECTURE.md)** | Technical architecture guide |
-| **[🚀 Deployment](./docs/DEPLOYMENT.md)** | Production deployment guide |
-| **[🔧 Troubleshooting](./docs/TROUBLESHOOTING.md)** | Common issues and solutions |
+```bash
+FILE__NEXTAUTH_SECRET=/run/secrets/myauthsecret
+```
 
-## 🎯 Use Cases
+Will set the `NEXTAUTH_SECRET` environment variable based on the contents of the `/run/secrets/myauthsecret` file.
+
+## Support Info
+
+* **Getting Started**: [User Guide](./docs/GETTING_STARTED.md) for new users
+* **Complete Manual**: [User Guide](./docs/USER_GUIDE.md) for comprehensive workflows  
+* **OBS Integration**: [OBS Guide](./docs/OBS_INTEGRATION.md) for live production setup
+* **FAQ**: [Frequently Asked Questions](./docs/FAQ.md) for common issues
+* **Developer Setup**: [Developer Documentation](./DEVELOPERS.md) for technical setup
+
+* Access application logs (Docker):
+
+    ```bash
+    docker logs -f clipshare
+    ```
+
+* Access application logs (Node.js):
+
+    ```bash
+    npm run dev
+    # Check console output
+    ```
+
+* Check application version:
+
+    ```bash
+    # View package.json version
+    cat web/package.json | grep version
+    ```
+
+## Updates and Maintenance
+
+### Updating the Application
+
+* **Pull latest changes**:
+
+    ```bash
+    git pull origin main
+    cd web
+    npm install
+    ```
+
+* **Database migrations**:
+
+    ```bash
+    npx prisma db push
+    ```
+
+* **Restart the application**:
+
+    ```bash
+    npm run dev
+    ```
+
+### Via Docker
+
+* **Update and restart**:
+
+    ```bash
+    docker-compose pull
+    docker-compose up -d
+    ```
+
+* **Remove old images**:
+
+    ```bash
+    docker image prune
+    ```
+
+## Use Cases
 
 ### **Content Creation Teams**
 - Review and annotate video content collaboratively
@@ -90,25 +208,35 @@ Our comprehensive user-focused documentation:
 - Collaborate on marketing and communication materials
 - Generate professional broadcast packages
 
-## 📞 Support
+## Building Locally
 
-### **Getting Help**
-1. **[Getting Started Guide](./docs/GETTING_STARTED.md)** - New user setup and basics
-2. **[User Guide](./docs/USER_GUIDE.md)** - Complete user manual and workflows
-3. **[FAQ](./docs/FAQ.md)** - Common questions and quick answers
-4. **[GitHub Issues](https://github.com/craigjmidwinter/clipshare/issues)** - Bug reports and feature requests
+If you want to make local modifications to Clipshare for development purposes:
 
-### **For Developers**
-**[👨‍💻 Developer Documentation](./DEVELOPERS.md)** - Technical setup, contributing, and development workflows
+```bash
+git clone https://github.com/craigjmidwinter/clipshare.git
+cd clipshare/web
+npm install
+npm run build
+```
 
-### **Reporting Issues**
-When reporting issues, please include:
-- Operating system and browser details
-- Steps to reproduce the issue
-- Expected vs actual behavior
-- Screenshots or error messages
+For complete development setup, see the **[Developer Documentation](./DEVELOPERS.md)**.
 
-## 📄 License
+## Documentation
+
+* **[📚 Complete Documentation](./docs/README.md)** - Full documentation index
+* **[👨‍💻 Developer Guide](./DEVELOPERS.md)** - Technical setup and contribution guide
+* **[🚀 Getting Started](./docs/GETTING_STARTED.md)** - Quick start for new users
+* **[📖 User Manual](./docs/USER_GUIDE.md)** - Comprehensive user guide
+* **[🎬 OBS Integration](./docs/OBS_INTEGRATION.md)** - Live production setup
+
+## Versions
+
+* **v0.3.2** - Latest stable release with core collaboration features
+* **main** - Development branch with latest features and fixes
+
+For detailed version history, see [GitHub Releases](https://github.com/craigjmidwinter/clipshare/releases).
+
+## License
 
 Private project for internal use.
 
