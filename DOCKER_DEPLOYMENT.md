@@ -1,90 +1,90 @@
-# Docker Build and GCR Deployment Setup
+# Docker Deployment Setup
 
-This repository now includes automated Docker image building and publishing to Google Container Registry (GCR) on pushes to the main branch.
+This repository includes automated Docker image building and publishing to GitHub Container Registry (GHCR) on pushes to the main branch.
 
-## Prerequisites
+## Quick Start with Docker Compose
 
-### 1. Google Cloud Project Setup
-
-1. Create a Google Cloud Project or use an existing one
-2. Enable the following APIs:
-   - Container Registry API
-   - Artifact Registry API
-   - Cloud Run API (optional, for deployment)
-
-### 2. Artifact Registry Repository
-
-Create an Artifact Registry repository:
+The easiest way to run Clipshare is using the provided `docker-compose.yml`:
 
 ```bash
-gcloud artifacts repositories create clipshare \
-    --repository-format=docker \
-    --location=us-central1 \
-    --description="Docker repository for Clipshare application"
+# Clone the repository
+git clone https://github.com/craigjmidwinter/clipshare.git
+cd clipshare
+
+# Create data directories for persistence
+mkdir -p data/{processed-files,temp,db,logs}
+
+# Copy and edit the environment variables
+cp web/env.example .env
+# Edit .env with your configuration
+
+# Start the application
+docker-compose up -d
 ```
 
-### 3. Service Account Setup
+## Volume Mappings for Persistence
 
-1. Create a service account:
+The application requires several directories to be persistent:
+
+### Required Volumes
+
+1. **`/app/processed-files`** - Stores all processed video clips and workspace files
+   - Map to: `./data/processed-files`
+   - Critical for data persistence
+
+2. **`/app/temp`** - Temporary files during processing
+   - Map to: `./data/temp` 
+   - Can be ephemeral but useful for debugging
+
+### Optional Volumes
+
+3. **`/app/prisma/db`** - Database files (if using SQLite)
+   - Map to: `./data/db`
+   - Required if using file-based database
+
+4. **`/app/logs`** - Application logs
+   - Map to: `./data/logs`
+   - Helpful for troubleshooting
+
+## Environment Variables
+
+Copy `web/env.example` to `.env` and configure:
+
 ```bash
-gcloud iam service-accounts create clipshare-github \
-    --description="Service account for GitHub Actions" \
-    --display-name="Clipshare GitHub Actions"
+# Database
+DATABASE_URL="file:./db/dev.db"
+
+# Authentication
+NEXTAUTH_SECRET="your-secret-here"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Plex Configuration
+PLEX_SERVER_URL="http://your-plex-server:32400"
+PLEX_TOKEN="your-plex-token"
 ```
 
-2. Grant necessary permissions:
+## Manual Docker Run
+
+If you prefer to run without docker-compose:
+
 ```bash
-# For Artifact Registry
-gcloud projects add-iam-policy-binding PROJECT_ID \
-    --member="serviceAccount:clipshare-github@PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/artifactregistry.writer"
+# Pull the latest image
+docker pull ghcr.io/craigjmidwinter/clipshare:latest
 
-# For Cloud Run (optional)
-gcloud projects add-iam-policy-binding PROJECT_ID \
-    --member="serviceAccount:clipshare-github@PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/run.admin"
+# Create data directories
+mkdir -p data/{processed-files,temp,db,logs}
 
-# For IAM (to create Cloud Run services)
-gcloud projects add-iam-policy-binding PROJECT_ID \
-    --member="serviceAccount:clipshare-github@PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/iam.serviceAccountUser"
+# Run the container
+docker run -d \
+  --name clipshare \
+  -p 3000:3000 \
+  -v $(pwd)/data/processed-files:/app/processed-files \
+  -v $(pwd)/data/temp:/app/temp \
+  -v $(pwd)/data/db:/app/prisma/db \
+  -v $(pwd)/data/logs:/app/logs \
+  --env-file .env \
+  ghcr.io/craigjmidwinter/clipshare:latest
 ```
-
-3. Create and download a key file:
-```bash
-gcloud iam service-accounts keys create key.json \
-    --iam-account=clipshare-github@PROJECT_ID.iam.gserviceaccount.com
-```
-
-### 4. GitHub Secrets Configuration
-
-Add the following secrets to your GitHub repository:
-
-1. **GCP_PROJECT_ID**: Your Google Cloud Project ID
-2. **GCP_SA_KEY**: Contents of the `key.json` file (the entire JSON content)
-
-To add secrets:
-1. Go to your GitHub repository
-2. Navigate to Settings → Secrets and variables → Actions
-3. Click "New repository secret" and add each secret
-
-## Workflow Details
-
-The GitHub Actions workflow (`.github/workflows/docker-build-deploy.yml`) will:
-
-1. **Trigger**: Automatically run on pushes to the `main` branch
-2. **Build**: Create a Docker image from the Next.js application
-3. **Tag**: Tag the image with both the commit SHA and `latest`
-4. **Push**: Upload the image to Google Artifact Registry
-5. **Deploy**: Optionally deploy to Cloud Run (can be disabled if not needed)
-
-## Docker Image Details
-
-- **Base Image**: Node.js 20 Alpine Linux (matches project's Node.js version requirements)
-- **Application**: Next.js application with standalone output
-- **Dependencies**: Includes FFmpeg and Python for video processing
-- **Port**: Exposes port 3000
-- **User**: Runs as non-root user for security
 
 ## CI/CD Workflows
 
@@ -99,46 +99,101 @@ The GitHub Actions workflow (`.github/workflows/docker-build-deploy.yml`) will:
 
 ### Docker Build and Publish (`docker-build-deploy.yml`)
 - **Triggers**: On pushes to main branch only
-- **Purpose**: Builds and publishes production images to Google Container Registry
-- **Requirements**: Requires proper GCP authentication and secrets
+- **Purpose**: Builds and publishes production images to GitHub Container Registry
+- **Authentication**: Uses `GITHUB_TOKEN` (automatically available)
+- **No setup required**: Works out of the box with GitHub Actions
 
-## Image URLs
+## Docker Image Details
 
-After successful builds, images will be available at:
-- `us-central1-docker.pkg.dev/PROJECT_ID/clipshare/clipshare-web:latest`
-- `us-central1-docker.pkg.dev/PROJECT_ID/clipshare/clipshare-web:COMMIT_SHA`
+- **Base Image**: Node.js 20 Alpine Linux (matches project's Node.js version requirements)
+- **Application**: Next.js application with standalone output
+- **Dependencies**: Includes FFmpeg and Python for video processing
+- **Port**: Exposes port 3000
+- **User**: Runs as non-root user for security
+- **Registry**: Published to `ghcr.io/craigjmidwinter/clipshare`
 
-## Manual Docker Commands
+## Available Image Tags
 
-To build and push manually:
+After successful builds, images are available at:
+- `ghcr.io/craigjmidwinter/clipshare:latest` - Latest main branch build
+- `ghcr.io/craigjmidwinter/clipshare:main` - Main branch builds
+- `ghcr.io/craigjmidwinter/clipshare:sha-<commit>` - Specific commit builds
+
+## Development
+
+### Building Locally
 
 ```bash
-# Build locally
 cd web
-docker build -t clipshare-web:local .
-
-# Tag for GCR
-docker tag clipshare-web:local us-central1-docker.pkg.dev/PROJECT_ID/clipshare/clipshare-web:manual
-
-# Push to GCR (requires authentication)
-gcloud auth configure-docker us-central1-docker.pkg.dev
-docker push us-central1-docker.pkg.dev/PROJECT_ID/clipshare/clipshare-web:manual
+docker build -t clipshare:local .
 ```
 
-## Environment Variables
+### Testing the Build
 
-The application expects certain environment variables for database connections, authentication, and other services. These should be configured in your deployment target (Cloud Run, Kubernetes, etc.).
+```bash
+# Run the test workflow locally (requires act)
+act -W .github/workflows/docker-build-test.yml
+```
 
 ## Troubleshooting
 
-1. **Build failures**: Check that all required secrets are properly configured
-2. **Permission errors**: Verify the service account has the correct IAM roles
-3. **Network issues**: Ensure your Google Cloud project has the necessary APIs enabled
-4. **Docker build issues**: The build process temporarily disables TypeScript and ESLint checks for Docker compatibility
+### Common Issues
 
-## Next Steps
+1. **Permission denied on volumes**: Ensure the Docker user can write to mapped directories
+2. **Database connection issues**: Check the `DATABASE_URL` environment variable
+3. **Missing processed files**: Ensure `/app/processed-files` is properly mapped
+4. **FFmpeg not found**: The image includes FFmpeg, but check if custom builds removed it
 
-1. Configure the required GitHub secrets
-2. Push to the main branch to trigger the first build
-3. Monitor the Actions tab for build progress
-4. Configure your deployment target to use the published images
+### Debugging
+
+```bash
+# Check container logs
+docker logs clipshare
+
+# Execute into running container
+docker exec -it clipshare sh
+
+# Check volume mounts
+docker inspect clipshare | grep -A 10 "Mounts"
+```
+
+### Health Check
+
+The container includes a health check that verifies the application is responding:
+
+```bash
+# Check health status
+docker ps
+# or
+docker inspect clipshare | grep -A 5 "Health"
+```
+
+## Production Deployment
+
+For production deployments:
+
+1. Use a reverse proxy (nginx, traefik) for SSL termination
+2. Set up proper backup for the `processed-files` directory
+3. Use an external database instead of SQLite for better performance
+4. Configure proper logging and monitoring
+5. Set strong secrets for `NEXTAUTH_SECRET`
+
+## Backup and Restore
+
+### Backup
+```bash
+# Backup processed files and database
+tar -czf clipshare-backup-$(date +%Y%m%d).tar.gz data/
+```
+
+### Restore
+```bash
+# Stop container
+docker-compose down
+
+# Extract backup
+tar -xzf clipshare-backup-YYYYMMDD.tar.gz
+
+# Start container
+docker-compose up -d
+```
