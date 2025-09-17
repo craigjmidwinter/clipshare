@@ -4,6 +4,7 @@ services:
   clipshare:
     image: ghcr.io/craigjmidwinter/clipshare:latest
     container_name: clipshare-web
+    user: "1001:1001"
     ports:
       - "3000:3000"
     volumes:

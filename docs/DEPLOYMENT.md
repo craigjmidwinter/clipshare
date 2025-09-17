@@ -209,6 +209,23 @@ echo "✅ Environment validation passed!"
 
 ## Docker Deployment
 
+### Quick Start
+
+1. **Setup Data Directories** (Required):
+   ```bash
+   # Run the setup script to create data directories with correct permissions
+   ./setup-data-dirs.sh
+   ```
+
+2. **Start the Application**:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Access the Application**:
+   - Open http://localhost:3000 in your browser
+   - Complete the welcome wizard to configure Plex integration
+
 ### Dockerfile
 
 ```dockerfile
