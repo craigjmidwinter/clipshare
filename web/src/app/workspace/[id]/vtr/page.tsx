@@ -100,6 +100,13 @@ export default function VTRControlPage() {
   const [volume, setVolume] = useState(100)
   const [muted, setMuted] = useState(false)
   const [looping, setLooping] = useState(false)
+  
+  // Local file management
+  const [localClipsPath, setLocalClipsPath] = useState<string>('')
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [useLocalFiles, setUseLocalFiles] = useState(false)
 
   // Load workspace data
   useEffect(() => {
@@ -175,6 +182,53 @@ export default function VTRControlPage() {
         console.log('Media playback ended:', data)
         setIsPlaying(false)
         setCurrentClip(null)
+        
+        // If looping is disabled, completely remove and recreate the source to prevent auto-restart
+        if (!looping) {
+          console.log('Looping is disabled, removing source to prevent auto-restart')
+          setTimeout(async () => {
+            try {
+              const sourceName = `Clipshare_VTR_Player_${workspaceId}`
+              
+              // First try to stop the source
+              await obsClient.call('TriggerMediaInputAction', { 
+                inputName: sourceName,
+                mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
+              })
+              
+              // Then remove the source completely
+              await obsClient.call('RemoveInput', { inputName: sourceName })
+              console.log('Source removed to prevent auto-restart')
+              
+              // Recreate the source with clean settings
+              const currentScene = await obsClient.call('GetCurrentProgramScene')
+              const sceneName = currentScene.currentProgramSceneName
+              
+              await obsClient.call('CreateInput', {
+                inputName: sourceName,
+                inputKind: 'ffmpeg_source',
+                sceneName: sceneName,
+                inputSettings: {
+                  is_local_file: false,
+                  local_file: '',
+                  input: '', // Empty input to prevent any playback
+                  looping: false,
+                  restart_on_activate: false,
+                  close_when_inactive: true,
+                  hw_decode: true,
+                  show_nothing_when_inactive: true,
+                  speed_percent: 100,
+                  clear_on_media_end: true,
+                  linear_alpha: false
+                }
+              })
+              
+              console.log('Source recreated with clean settings')
+            } catch (err) {
+              console.warn('Could not remove/recreate source after playback ended:', err)
+            }
+          }, 100) // Small delay to ensure the event has been processed
+        }
       })
 
       // Test the connection by getting OBS version
@@ -189,6 +243,10 @@ export default function VTRControlPage() {
       // Create or find the VTR player source
       console.log('Setting up VTR player source...')
       await ensureVTRPlayerSource(obsClient)
+      
+      // Ensure looping setting is properly applied to existing sources
+      await ensureLoopingSetting(obsClient)
+      
       console.log('VTR player source setup complete')
       
       setObs(obsClient)
@@ -273,10 +331,15 @@ export default function VTRControlPage() {
           inputSettings: {
             is_local_file: false,
             local_file: '',
-            looping: looping,
+            looping: false, // Always start with looping disabled
             restart_on_activate: false,
-            close_when_inactive: false,
-            hw_decode: true
+            close_when_inactive: true, // Close when inactive to prevent auto-restart
+            hw_decode: true,
+            show_nothing_when_inactive: true,
+            speed_percent: 100,
+            // Additional settings to prevent auto-restart
+            clear_on_media_end: true,
+            linear_alpha: false
           }
         })
         console.log(`Created VTR player source: ${sourceName} in scene: ${sceneName}`)
@@ -305,14 +368,73 @@ export default function VTRControlPage() {
       if (!sourceInScene) {
         console.log('Adding source to current scene...')
         // Add source to current scene
-        await obsClient.call('CreateSceneItem', {
+        const sceneItem = await obsClient.call('CreateSceneItem', {
           sceneName: sceneName,
           sourceName: sourceName,
           sceneItemEnabled: true
         })
         console.log(`Added VTR player source to current scene: ${sceneName}`)
+        
+        // Get canvas dimensions and make the source full screen
+        try {
+          const sceneInfo = await obsClient.call('GetSceneSceneTransitionOverride', { sceneName })
+          const canvasWidth = 1920  // Default canvas width
+          const canvasHeight = 1080 // Default canvas height
+          
+          // Set source to full screen
+          await obsClient.call('SetSceneItemTransform', {
+            sceneName: sceneName,
+            sceneItemId: sceneItem.sceneItemId,
+            sceneItemTransform: {
+              positionX: 0,
+              positionY: 0,
+              scaleX: 1.0,
+              scaleY: 1.0,
+              rotation: 0,
+              alignment: 0,
+              boundsType: 0,
+              boundsAlignment: 0,
+              boundsWidth: canvasWidth,
+              boundsHeight: canvasHeight
+            }
+          })
+          console.log('Set VTR source to full screen')
+        } catch (transformErr) {
+          console.warn('Could not set source to full screen:', transformErr)
+        }
       } else {
         console.log(`VTR player source already in current scene: ${sceneName}`)
+        
+        // Even if source exists, make sure it's full screen
+        try {
+          const sceneItems = await obsClient.call('GetSceneItemList', { sceneName })
+          const existingItem = sceneItems.sceneItems.find((item: any) => item.sourceName === sourceName)
+          
+          if (existingItem) {
+            const canvasWidth = 1920
+            const canvasHeight = 1080
+            
+            await obsClient.call('SetSceneItemTransform', {
+              sceneName: sceneName,
+              sceneItemId: existingItem.sceneItemId,
+              sceneItemTransform: {
+                positionX: 0,
+                positionY: 0,
+                scaleX: 1.0,
+                scaleY: 1.0,
+                rotation: 0,
+                alignment: 0,
+                boundsType: 0,
+                boundsAlignment: 0,
+                boundsWidth: canvasWidth,
+                boundsHeight: canvasHeight
+              }
+            })
+            console.log('Updated existing VTR source to full screen')
+          }
+        } catch (transformErr) {
+          console.warn('Could not update existing source to full screen:', transformErr)
+        }
       }
     } catch (err) {
       console.error('Error adding source to scene:', err)
@@ -322,6 +444,39 @@ export default function VTRControlPage() {
         stack: err?.stack
       })
       // Don't throw here - source creation was successful, scene addition is optional
+    }
+  }
+
+  // Ensure looping setting is properly applied to existing sources
+  const ensureLoopingSetting = async (obsClient: OBSWebSocket) => {
+    const sourceName = `Clipshare_VTR_Player_${workspaceId}`
+    
+    try {
+      console.log(`Ensuring looping setting is correct for: ${sourceName}`)
+      
+      // Get current settings
+      const settingsResponse = await obsClient.call('GetInputSettings', { inputName: sourceName })
+      const currentSettings = settingsResponse.inputSettings
+      
+      // Check if looping setting needs to be updated
+      if (currentSettings.looping !== looping) {
+        console.log(`Updating looping setting from ${currentSettings.looping} to ${looping}`)
+        
+        await obsClient.call('SetInputSettings', {
+          inputName: sourceName,
+          inputSettings: {
+            ...currentSettings,
+            looping: looping
+          }
+        })
+        
+        console.log(`Looping setting updated to: ${looping}`)
+      } else {
+        console.log(`Looping setting is already correct: ${looping}`)
+      }
+    } catch (err) {
+      console.warn('Could not ensure looping setting:', err)
+      // Don't throw - this is not critical for connection
     }
   }
 
@@ -340,6 +495,105 @@ export default function VTRControlPage() {
     }
   }
 
+  // Download all clips as a zip file
+  const downloadClipsZip = async () => {
+    if (!workspace) return
+
+    setIsDownloading(true)
+    setDownloadProgress(0)
+
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/clips/bulk-download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bookmarkIds: workspace.bookmarks.map(b => b.id)
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to download clips')
+      }
+
+      // Get the zip file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      
+      // Create download link
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${workspace.title.replace(/[^a-zA-Z0-9-_]/g, '_')}_clips.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      setDownloadProgress(100)
+      console.log('Clips downloaded successfully')
+    } catch (err) {
+      console.error('Error downloading clips:', err)
+      setObsError('Failed to download clips')
+    } finally {
+      setIsDownloading(false)
+      setTimeout(() => setDownloadProgress(0), 2000)
+    }
+  }
+
+  // Handle file browser for selecting local clips folder
+  const handleFileBrowser = () => {
+    // Create a hidden file input for directory selection
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.webkitdirectory = true
+    input.directory = true
+    input.multiple = true
+    input.style.display = 'none'
+    
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files
+      if (files && files.length > 0) {
+        // Get the directory name from the first file's webkitRelativePath
+        const firstFile = files[0]
+        const relativePath = firstFile.webkitRelativePath
+        const folderName = relativePath.split('/')[0]
+        
+        // For now, we'll use the folder name and ask user to provide full path
+        // Browser security prevents us from getting the full system path
+        setLocalClipsPath(folderName)
+        setUseLocalFiles(true)
+        console.log('Selected local clips folder:', folderName)
+        console.log('Files found:', files.length)
+        
+        // Show a success message
+        console.log(`Found ${files.length} files in folder "${folderName}"`)
+        
+        // Store the folder name - user can edit the full path in the text field
+        console.log('Folder detected:', folderName)
+        console.log('Please edit the path in the text field below to include the full system path')
+      }
+    }
+    
+    // Add to DOM temporarily and trigger click
+    document.body.appendChild(input)
+    input.click()
+    
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(input)
+    }, 1000)
+  }
+
+  // Get local file path for a bookmark
+  const getLocalFilePath = (bookmark: Workspace['bookmarks'][0]): string => {
+    if (!useLocalFiles || !localClipsPath) return ''
+    
+    const bookmarkLabel = bookmark.label || "bookmark"
+    const safeLabel = bookmark.label ? bookmark.label.replace(/[^a-zA-Z0-9-_]/g, '_') : `bookmark_${bookmark.id}`
+    return `${localClipsPath}/${safeLabel}.mp4`
+  }
+
   // Play a specific clip
   const playClip = async (bookmark: Workspace['bookmarks'][0]) => {
     if (!obs || !workspace) return
@@ -347,23 +601,112 @@ export default function VTRControlPage() {
     try {
       const sourceName = `Clipshare_VTR_Player_${workspaceId}`
       
-      // Generate token for this bookmark
-      const token = await generateStreamToken(bookmark.id)
-      const clipUrl = `${window.location.origin}/api/workspaces/${workspaceId}/clips/${bookmark.id}/stream?token=${token}`
+      // Determine if we should use local files or remote URLs
+      const useLocal = useLocalFiles && localClipsPath
+      let clipPath = ''
       
-      // Update the media source to play the clip
-      await obs.call('SetInputSettings', {
-        inputName: sourceName,
-        inputSettings: {
-          is_local_file: false,
-          local_file: '',
-          input: clipUrl,
+      if (useLocal) {
+        clipPath = getLocalFilePath(bookmark)
+        console.log(`Using local file: ${clipPath}`)
+      } else {
+        // Generate token for this bookmark
+        const token = await generateStreamToken(bookmark.id)
+        clipPath = `${window.location.origin}/api/workspaces/${workspaceId}/clips/${bookmark.id}/stream?token=${token}`
+        console.log(`Using remote URL: ${clipPath}`)
+      }
+      
+      // Check if source exists and if we need to recreate it
+      let needsRecreation = false
+      try {
+        const currentSettings = await obs.call('GetInputSettings', { inputName: sourceName })
+        const currentIsLocal = currentSettings.inputSettings.is_local_file
+        
+        // If the local file setting has changed, we need to recreate the source
+        if (currentIsLocal !== useLocal) {
+          console.log(`Local file setting changed from ${currentIsLocal} to ${useLocal}, recreating source...`)
+          needsRecreation = true
+        }
+      } catch (err) {
+        console.log('Source does not exist, recreating...')
+        needsRecreation = true
+      }
+      
+      // Recreate the source if needed
+      if (needsRecreation) {
+        const currentScene = await obs.call('GetCurrentProgramScene')
+        const sceneName = currentScene.currentProgramSceneName
+        
+        // Remove the old source if it exists
+        try {
+          await obs.call('RemoveInput', { inputName: sourceName })
+          console.log(`Removed old source ${sourceName}`)
+        } catch (err) {
+          console.log('No old source to remove')
+        }
+        
+        // Create the new source with correct settings
+        await obs.call('CreateInput', {
+          inputName: sourceName,
+          inputKind: 'ffmpeg_source',
+          sceneName: sceneName,
+          inputSettings: {
+            is_local_file: useLocal,
+            local_file: useLocal ? clipPath : '',
+            input: useLocal ? '' : clipPath,
+            looping: looping,
+            restart_on_activate: false,
+            close_when_inactive: !useLocal, // Only close when inactive for remote files
+            hw_decode: true,
+            show_nothing_when_inactive: true,
+            speed_percent: 100,
+            clear_on_media_end: !useLocal, // Only clear on media end for remote files
+            linear_alpha: false,
+            // Additional settings for local files
+            buffering_mb: useLocal ? 2 : 0, // Buffer size for local files
+            seekable: useLocal // Allow seeking for local files
+          }
+        })
+        console.log(`Created new source ${sourceName} with is_local_file: ${useLocal}`)
+      }
+      
+      // Update the media source to play the clip (only if we didn't recreate it)
+      if (!needsRecreation) {
+        const inputSettings = {
+          is_local_file: useLocal,
+          local_file: useLocal ? clipPath : '',
+          input: useLocal ? '' : clipPath,
           looping: looping,
           restart_on_activate: false,
-          close_when_inactive: false,
-          hw_decode: true
+          close_when_inactive: !useLocal, // Only close when inactive for remote files
+          hw_decode: true,
+          show_nothing_when_inactive: true,
+          speed_percent: 100,
+          clear_on_media_end: !useLocal, // Only clear on media end for remote files
+          linear_alpha: false,
+          // Additional settings for local files
+          buffering_mb: useLocal ? 2 : 0, // Buffer size for local files
+          seekable: useLocal // Allow seeking for local files
         }
-      })
+        
+        console.log('Setting input settings:', inputSettings)
+        console.log(`Looping is set to: ${looping} for clip: ${bookmark.label || bookmark.id} (${useLocal ? 'local' : 'remote'})`)
+        console.log(`is_local_file is set to: ${useLocal}`)
+        
+        await obs.call('SetInputSettings', {
+          inputName: sourceName,
+          inputSettings: inputSettings
+        })
+      } else {
+        console.log('Source was recreated, skipping settings update')
+      }
+      
+      // Verify the settings were applied
+      try {
+        const currentSettings = await obs.call('GetInputSettings', { inputName: sourceName })
+        console.log('Current input settings:', currentSettings.inputSettings)
+      } catch (err) {
+        console.warn('Could not verify input settings:', err)
+      }
 
       // Trigger the media input to restart and play
       await obs.call('TriggerMediaInputAction', { 
@@ -386,13 +729,43 @@ export default function VTRControlPage() {
 
     try {
       const sourceName = `Clipshare_VTR_Player_${workspaceId}`
+      
+      // First stop the media playback
       await obs.call('TriggerMediaInputAction', { 
         inputName: sourceName,
         mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
       })
       
+      // Remove the source completely to prevent any auto-restart
+      await obs.call('RemoveInput', { inputName: sourceName })
+      console.log('Source removed to prevent auto-restart')
+      
+      // Recreate the source with clean, empty settings
+      const currentScene = await obs.call('GetCurrentProgramScene')
+      const sceneName = currentScene.currentProgramSceneName
+      
+      await obs.call('CreateInput', {
+        inputName: sourceName,
+        inputKind: 'ffmpeg_source',
+        sceneName: sceneName,
+        inputSettings: {
+          is_local_file: false,
+          local_file: '',
+          input: '', // Empty input to prevent any playback
+          looping: false,
+          restart_on_activate: false,
+          close_when_inactive: true,
+          hw_decode: true,
+          show_nothing_when_inactive: true,
+          speed_percent: 100,
+          clear_on_media_end: true,
+          linear_alpha: false
+        }
+      })
+      
       setIsPlaying(false)
       setCurrentClip(null)
+      console.log('Clip stopped and source recreated with clean settings')
     } catch (err) {
       console.error('Error stopping clip:', err)
       setObsError('Failed to stop clip')
@@ -436,15 +809,46 @@ export default function VTRControlPage() {
       const sourceName = `Clipshare_VTR_Player_${workspaceId}`
       const newLooping = !looping
       
+      // Get current settings first to preserve all existing settings
+      let currentSettings = {}
+      try {
+        const settingsResponse = await obs.call('GetInputSettings', { inputName: sourceName })
+        currentSettings = settingsResponse.inputSettings
+      } catch (err) {
+        console.warn('Could not get current settings, using defaults:', err)
+        currentSettings = {
+          is_local_file: false,
+          local_file: '',
+          restart_on_activate: false,
+          close_when_inactive: true, // Close when inactive to prevent auto-restart
+          hw_decode: true,
+          show_nothing_when_inactive: true,
+          speed_percent: 100,
+          // Additional settings to prevent auto-restart
+          clear_on_media_end: true,
+          linear_alpha: false
+        }
+      }
+      
+      // Update settings with new looping value while preserving all other settings
       await obs.call('SetInputSettings', {
         inputName: sourceName,
         inputSettings: {
+          ...currentSettings,
           looping: newLooping
         }
       })
       
       setLooping(newLooping)
       console.log(`Looping ${newLooping ? 'enabled' : 'disabled'}`)
+      
+      // If we're currently playing a clip, restart it to apply the new loop setting
+      if (isPlaying) {
+        await obs.call('TriggerMediaInputAction', { 
+          inputName: sourceName,
+          mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+        })
+      }
     } catch (err) {
       console.error('Error toggling looping:', err)
     }
@@ -459,13 +863,88 @@ export default function VTRControlPage() {
       const currentScene = await obs.call('GetCurrentProgramScene')
       const sceneName = currentScene.currentProgramSceneName
       
-      await obs.call('CreateSceneItem', {
+      // First check if the source exists
+      let sourceExists = false
+      try {
+        await obs.call('GetInputSettings', { inputName: sourceName })
+        sourceExists = true
+        console.log(`Source ${sourceName} already exists`)
+      } catch (err) {
+        console.log(`Source ${sourceName} does not exist, creating it first...`)
+        sourceExists = false
+      }
+      
+      // Create the source if it doesn't exist
+      if (!sourceExists) {
+        await obs.call('CreateInput', {
+          inputName: sourceName,
+          inputKind: 'ffmpeg_source',
+          sceneName: sceneName,
+          inputSettings: {
+            is_local_file: false,
+            local_file: '',
+            input: '',
+            looping: looping,
+            restart_on_activate: false,
+            close_when_inactive: true,
+            hw_decode: true,
+            show_nothing_when_inactive: true,
+            speed_percent: 100,
+            clear_on_media_end: true,
+            linear_alpha: false,
+            buffering_mb: 0,
+            seekable: false
+          }
+        })
+        console.log(`Created source ${sourceName}`)
+      }
+      
+      // Check if source is already in the scene
+      const sceneItems = await obs.call('GetSceneItemList', { sceneName: sceneName })
+      const existingItem = sceneItems.sceneItems.find((item: any) => item.sourceName === sourceName)
+      
+      if (existingItem) {
+        console.log(`Source ${sourceName} is already in scene ${sceneName}`)
+        return existingItem
+      }
+      
+      // Now add the source to the scene
+      const sceneItem = await obs.call('CreateSceneItem', {
         sceneName: sceneName,
         sourceName: sourceName,
         sceneItemEnabled: true
       })
       
       console.log(`Added VTR player source to current scene: ${sceneName}`)
+      
+      // Use the correct scene item (either new or existing)
+      const itemToUse = existingItem || sceneItem
+      
+      // Make the source full screen
+      try {
+        const canvasWidth = 1920
+        const canvasHeight = 1080
+        
+        await obs.call('SetSceneItemTransform', {
+          sceneName: sceneName,
+          sceneItemId: itemToUse.sceneItemId,
+          sceneItemTransform: {
+            positionX: 0,
+            positionY: 0,
+            scaleX: 1.0,
+            scaleY: 1.0,
+            rotation: 0,
+            alignment: 0,
+            boundsType: 0,
+            boundsAlignment: 0,
+            boundsWidth: canvasWidth,
+            boundsHeight: canvasHeight
+          }
+        })
+        console.log('Set VTR source to full screen')
+      } catch (transformErr) {
+        console.warn('Could not set source to full screen:', transformErr)
+      }
     } catch (err) {
       console.error('Error adding source to scene:', err)
       setObsError('Failed to add source to scene')
@@ -679,6 +1158,114 @@ export default function VTRControlPage() {
         {/* VTR Control Panel */}
         {obsConnected && (
           <div className="space-y-8">
+            {/* Local Files Setup */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Local Files Setup</h2>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">
+                      For better performance and reliable looping, download clips locally and select the extracted folder. This allows OBS to use local files instead of remote URLs.
+                    </p>
+                    <div className="flex items-center space-x-4">
+                      <button
+                        onClick={downloadClipsZip}
+                        disabled={isDownloading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                      >
+                        {isDownloading ? (
+                          <>
+                            <ClockIcon className="h-4 w-4 mr-2 animate-spin" />
+                            Downloading... {downloadProgress}%
+                          </>
+                        ) : (
+                          <>
+                            <ArrowPathIcon className="h-4 w-4 mr-2" />
+                            Download All Clips
+                          </>
+                        )}
+                      </button>
+                      
+                      <button
+                        onClick={handleFileBrowser}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+                      >
+                        <ArrowPathIcon className="h-4 w-4 mr-2" />
+                        Select Extracted Folder
+                      </button>
+                    </div>
+                    
+                    {/* Manual path input */}
+                    <div className="mt-4">
+                      <label htmlFor="localPath" className="block text-sm font-medium text-gray-700 mb-2">
+                        Or enter the full path manually:
+                      </label>
+                      <div className="flex">
+                        <input
+                          id="localPath"
+                          type="text"
+                          value={localClipsPath}
+                          onChange={(e) => setLocalClipsPath(e.target.value)}
+                          placeholder="/Users/username/Downloads/clips_folder"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          onClick={() => {
+                            if (localClipsPath) {
+                              setUseLocalFiles(true)
+                              console.log('Manual path set:', localClipsPath)
+                            }
+                          }}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700"
+                        >
+                          Set Path
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Enter the full path to your extracted clips folder (e.g., /Users/username/Downloads/clips_folder)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Instructions:</strong>
+                  </p>
+                  <ol className="text-xs text-blue-600 mt-1 list-decimal list-inside space-y-1">
+                    <li>Click "Download All Clips" to download a ZIP file</li>
+                    <li>Extract the ZIP file to a folder on your computer</li>
+                    <li>Either click "Select Extracted Folder" OR manually enter the full path below</li>
+                    <li>Click "Set Path" to enable local file mode</li>
+                    <li>OBS will now use local files for reliable looping control</li>
+                  </ol>
+                </div>
+                
+                {localClipsPath && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      <strong>Local files enabled:</strong> {localClipsPath}
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">
+                      Clips will now use local files for better performance and reliable looping control.
+                    </p>
+                  </div>
+                )}
+                
+                {useLocalFiles && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Performance Mode:</strong> Using local files
+                    </p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Looping control is now fully reliable with local files.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Current Status */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Status</h2>
@@ -793,6 +1380,9 @@ export default function VTRControlPage() {
                         <div className="text-xs text-gray-500 space-y-1">
                           <p>Duration: {duration}s</p>
                           <p>Creator: {creator}</p>
+                          <p className={`font-medium ${useLocalFiles ? 'text-green-600' : 'text-orange-600'}`}>
+                            {useLocalFiles ? 'Local File' : 'Remote URL'}
+                          </p>
                         </div>
 
                         {isCurrentClip && isPlaying && (

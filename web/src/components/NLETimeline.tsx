@@ -37,7 +37,7 @@ interface NLETimelineProps {
   currentTime: number // in seconds
   onSeek: (time: number) => void
   bookmarks: Bookmark[]
-  onBookmarkCreate: (startMs: number, endMs: number) => void
+  onBookmarkCreate: (bookmark: { startMs: number; endMs: number; label?: string }) => void
   onBookmarkUpdate: (bookmarkId: string, startMs: number, endMs: number) => void
   onBookmarkDelete: (bookmarkId: string) => void
   isPlaying: boolean
@@ -82,12 +82,15 @@ export default function NLETimeline({
   const defaultZoom = containerWidth / (duration * frameRate * 4) // 4 pixels per frame at zoom 1
   const [zoom, setZoom] = useState(Math.max(0.01, defaultZoom)) // Start with full duration visible
   const [scrollPosition, setScrollPosition] = useState(0)
-  const [isDragging, setIsDragging] = useState<'playhead' | 'in' | 'out' | 'bookmark-body' | 'bookmark-start' | 'bookmark-end' | null>(null)
+  const [isDragging, setIsDragging] = useState<'playhead' | 'in' | 'out' | 'bookmark-body' | 'bookmark-start' | 'bookmark-end' | 'selection' | null>(null)
   const [dragStart, setDragStart] = useState({ x: 0, time: 0 })
   const [selectionStart, setSelectionStart] = useState<number | null>(null)
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null)
   const [draggedBookmarkId, setDraggedBookmarkId] = useState<string | null>(null)
   const [dragPreview, setDragPreview] = useState<{ startMs: number; endMs: number } | null>(null)
+  const [showNamePrompt, setShowNamePrompt] = useState(false)
+  const [pendingBookmark, setPendingBookmark] = useState<{ startMs: number; endMs: number } | null>(null)
+  const [clipName, setClipName] = useState("")
   
   const timelineRef = useRef<HTMLDivElement>(null)
   const frameWidth = 4 // pixels per frame at zoom level 1
@@ -114,7 +117,7 @@ export default function NLETimeline({
 
   // Add document-level event listeners for drag operations
   useEffect(() => {
-    if (isDragging && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
+    if (isDragging && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end' || isDragging === 'selection')) {
       const handleDocumentMouseMove = (e: MouseEvent) => {
         handleMouseMove(e)
       }
@@ -129,6 +132,11 @@ export default function NLETimeline({
       return () => {
         document.removeEventListener('mousemove', handleDocumentMouseMove)
         document.removeEventListener('mouseup', handleDocumentMouseUp)
+        // Clear any pending selection when component unmounts or drag is cancelled
+        if (isDragging === 'selection') {
+          setSelectionStart(null)
+          setSelectionEnd(null)
+        }
       }
     }
   }, [isDragging])
@@ -213,6 +221,12 @@ export default function NLETimeline({
 
     if (isDragging === 'playhead') {
       onSeek(newTime)
+    } else if (isDragging === 'selection') {
+      // Handle drag-to-create selection
+      const startTime = Math.min(dragStart.time, newTime)
+      const endTime = Math.max(dragStart.time, newTime)
+      setSelectionStart(startTime)
+      setSelectionEnd(endTime)
     } else if (isDragging === 'in' && selectionEnd !== null) {
       setSelectionStart(Math.min(newTime, selectionEnd))
     } else if (isDragging === 'out' && selectionStart !== null) {
@@ -248,12 +262,24 @@ export default function NLETimeline({
   const handleMouseUp = (e: React.MouseEvent | MouseEvent) => {
     // console.log('MouseUp:', { isDragging, draggedBookmarkId, hasOnBookmarkUpdate: !!onBookmarkUpdate })
     
-    if (isDragging === 'in' || isDragging === 'out') {
-      if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
-        onBookmarkCreate(selectionStart * 1000, selectionEnd * 1000)
+    if (isDragging === 'in' || isDragging === 'out' || isDragging === 'selection') {
+      if (selectionStart !== null && selectionEnd !== null && Math.abs(selectionEnd - selectionStart) > 0.1) {
+        // Show name prompt for drag-to-create
+        if (isDragging === 'selection') {
+          setPendingBookmark({ startMs: selectionStart * 1000, endMs: selectionEnd * 1000 })
+          setShowNamePrompt(true)
+        } else {
+          // For in/out point adjustments, create bookmark directly
+          onBookmarkCreate({ startMs: selectionStart * 1000, endMs: selectionEnd * 1000 })
+        }
+        // Clear selection after creating bookmark to allow creating subsequent clips
+        setSelectionStart(null)
+        setSelectionEnd(null)
+      } else {
+        // Clear selection if it's too small or invalid
+        setSelectionStart(null)
+        setSelectionEnd(null)
       }
-      setSelectionStart(null)
-      setSelectionEnd(null)
     } else if (draggedBookmarkId && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
       // Handle bookmark drag completion - get current mouse position from the mouseup event
       const rect = timelineRef.current!.getBoundingClientRect()
@@ -353,8 +379,11 @@ export default function NLETimeline({
         setSelectionStart(clickedTime)
       }
     } else {
-      // Regular click to seek
-      onSeek(clickedTime)
+      // Regular click - start drag-to-create selection immediately
+      setIsDragging('selection')
+      setDragStart({ x: e.clientX, time: clickedTime })
+      setSelectionStart(clickedTime)
+      setSelectionEnd(clickedTime)
     }
   }
 
@@ -376,6 +405,25 @@ export default function NLETimeline({
       setZoom(Math.max(0.01, optimalZoom)) // Remove max limit for fit to window
       setScrollPosition(0)
     }
+  }
+
+  const handleNamePromptSubmit = () => {
+    if (pendingBookmark) {
+      onBookmarkCreate({ 
+        startMs: pendingBookmark.startMs, 
+        endMs: pendingBookmark.endMs,
+        label: clipName.trim() || undefined
+      })
+      setShowNamePrompt(false)
+      setPendingBookmark(null)
+      setClipName("")
+    }
+  }
+
+  const handleNamePromptCancel = () => {
+    setShowNamePrompt(false)
+    setPendingBookmark(null)
+    setClipName("")
   }
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -713,6 +761,47 @@ export default function NLETimeline({
           </div>
         </div>
       </div>
+
+      {/* Simple Name Prompt Modal */}
+      {showNamePrompt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-96 max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Clip</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Enter a name for your clip:
+            </p>
+            <input
+              type="text"
+              value={clipName}
+              onChange={(e) => setClipName(e.target.value)}
+              placeholder="e.g., Important Scene"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-4"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleNamePromptSubmit()
+                } else if (e.key === 'Escape') {
+                  handleNamePromptCancel()
+                }
+              }}
+            />
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleNamePromptCancel}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNamePromptSubmit}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+              >
+                Create Clip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

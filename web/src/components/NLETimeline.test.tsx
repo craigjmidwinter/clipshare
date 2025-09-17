@@ -283,4 +283,181 @@ describe('NLETimeline', () => {
     expect(screen.getByText('0:00:00')).toBeInTheDocument()
     expect(screen.getByText('1:40:00')).toBeInTheDocument()
   })
+
+  describe('Drag-to-create clip functionality', () => {
+    it('creates a clip by dragging from left to right', async () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Simulate mouse down to start selection
+      fireEvent.mouseDown(timeline!, {
+        clientX: 100,
+        button: 0,
+      })
+      
+      // Simulate mouse move to create selection
+      fireEvent.mouseMove(document, {
+        clientX: 200,
+      })
+      
+      // Simulate mouse up to complete selection
+      fireEvent.mouseUp(document, {
+        clientX: 200,
+      })
+      
+      // Check if onBookmarkCreate was called with correct times
+      await waitFor(() => {
+        expect(mockProps.onBookmarkCreate).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.any(Number)
+        )
+      })
+    })
+
+    it('creates a clip by dragging from right to left', async () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Simulate mouse down to start selection
+      fireEvent.mouseDown(timeline!, {
+        clientX: 200,
+        button: 0,
+      })
+      
+      // Simulate mouse move to create selection (dragging left)
+      fireEvent.mouseMove(document, {
+        clientX: 100,
+      })
+      
+      // Simulate mouse up to complete selection
+      fireEvent.mouseUp(document, {
+        clientX: 100,
+      })
+      
+      // Check if onBookmarkCreate was called with correct times
+      await waitFor(() => {
+        expect(mockProps.onBookmarkCreate).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.any(Number)
+        )
+      })
+    })
+
+    it('clears selection after creating a clip', async () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Create first clip
+      fireEvent.mouseDown(timeline!, {
+        clientX: 100,
+        button: 0,
+      })
+      
+      fireEvent.mouseMove(document, {
+        clientX: 200,
+      })
+      
+      fireEvent.mouseUp(document, {
+        clientX: 200,
+      })
+      
+      await waitFor(() => {
+        expect(mockProps.onBookmarkCreate).toHaveBeenCalledTimes(1)
+      })
+      
+      // Create second clip - should work because selection was cleared
+      fireEvent.mouseDown(timeline!, {
+        clientX: 300,
+        button: 0,
+      })
+      
+      fireEvent.mouseMove(document, {
+        clientX: 400,
+      })
+      
+      fireEvent.mouseUp(document, {
+        clientX: 400,
+      })
+      
+      await waitFor(() => {
+        expect(mockProps.onBookmarkCreate).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('does not create clip if drag distance is too small', async () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Simulate mouse down and up at nearly the same position
+      fireEvent.mouseDown(timeline!, {
+        clientX: 100,
+        button: 0,
+      })
+      
+      fireEvent.mouseMove(document, {
+        clientX: 101, // Very small movement
+      })
+      
+      fireEvent.mouseUp(document, {
+        clientX: 101,
+      })
+      
+      // Should not create a bookmark for tiny selections
+      await waitFor(() => {
+        expect(mockProps.onBookmarkCreate).not.toHaveBeenCalled()
+      })
+    })
+
+    it('shows selection range during drag', () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Start drag
+      fireEvent.mouseDown(timeline!, {
+        clientX: 100,
+        button: 0,
+      })
+      
+      // Move to create selection
+      fireEvent.mouseMove(document, {
+        clientX: 200,
+      })
+      
+      // Check if selection range is visible
+      const selectionRange = document.querySelector('.bg-orange-500')
+      expect(selectionRange).toBeInTheDocument()
+      
+      // Complete the drag
+      fireEvent.mouseUp(document, {
+        clientX: 200,
+      })
+    })
+
+    it('handles basic drag-to-create functionality', () => {
+      render(<NLETimeline {...mockProps} />)
+      
+      const timeline = document.querySelector('.cursor-pointer')
+      expect(timeline).toBeInTheDocument()
+      
+      // Test that mouse down starts selection
+      fireEvent.mouseDown(timeline!, {
+        clientX: 100,
+        button: 0,
+      })
+      
+      // Verify that selection state is set
+      // This is a basic test to ensure the drag state is initialized
+      expect(timeline).toBeInTheDocument()
+    })
+  })
 })

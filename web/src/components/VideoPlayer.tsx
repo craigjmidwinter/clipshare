@@ -851,9 +851,9 @@ export default function VideoPlayer({
               }
             }}
             bookmarks={bookmarks}
-            onBookmarkCreate={(startMs, endMs) => {
-              setBookmarkStartTime(startMs)
-              setBookmarkEndTime(endMs)
+            onBookmarkCreate={(bookmark) => {
+              setBookmarkStartTime(bookmark.startMs)
+              setBookmarkEndTime(bookmark.endMs)
               setShowBookmarkModal(true)
             }}
             onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
@@ -1065,9 +1065,9 @@ export default function VideoPlayer({
               }
             }}
             bookmarks={bookmarks}
-            onBookmarkCreate={(startMs, endMs) => {
-              setBookmarkStartTime(startMs)
-              setBookmarkEndTime(endMs)
+            onBookmarkCreate={(bookmark) => {
+              setBookmarkStartTime(bookmark.startMs)
+              setBookmarkEndTime(bookmark.endMs)
               setShowBookmarkModal(true)
             }}
             onBookmarkUpdate={(bookmarkId, startMs, endMs) => {
