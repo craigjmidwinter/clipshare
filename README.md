@@ -52,14 +52,9 @@ Clipshare enables teams to collaborate on video content directly from Plex media
 The easiest way to run Clipshare is with Docker:
 
 ```bash
-# Clone and setup
+# Clone and start
 git clone https://github.com/craigjmidwinter/clipshare.git
 cd clipshare
-
-# Setup data directories with correct permissions
-./setup-data-dirs.sh
-
-# Start the application
 docker compose up -d
 ```
 

@@ -31,28 +31,31 @@ ENV NODE_ENV=production
 # Disable telemetry during runtime.
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
 # Install system dependencies needed by the app
-RUN apk add --no-cache ffmpeg python3 py3-pip
+RUN apk add --no-cache ffmpeg python3 py3-pip shadow
+
+# Add user and group with configurable UID/GID
+ARG PUID=1000
+ARG PGID=1000
+RUN addgroup -g ${PGID} clipshare && \
+    adduser -u ${PUID} -G clipshare -s /bin/sh -D clipshare
 
 COPY --from=builder /app/public ./public
 
 # Set the correct permission for prerender cache
 RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN chown clipshare:clipshare .next
 
 # Create data directory and set permissions
-RUN mkdir -p /app/data/{db,processed-files,temp,logs}
-RUN chown -R nextjs:nodejs /app/data
+RUN mkdir -p /app/data/{db,processed-files,temp,logs} && \
+    chown -R clipshare:clipshare /app/data
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=clipshare:clipshare /app/.next/standalone ./
+COPY --from=builder --chown=clipshare:clipshare /app/.next/static ./.next/static
 
-USER nextjs
+USER clipshare
 
 EXPOSE 3000
 

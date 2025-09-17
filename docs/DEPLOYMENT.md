@@ -211,20 +211,31 @@ echo "✅ Environment validation passed!"
 
 ### Quick Start
 
-1. **Setup Data Directories** (Required):
-   ```bash
-   # Run the setup script to create data directories with correct permissions
-   ./setup-data-dirs.sh
-   ```
-
-2. **Start the Application**:
+1. **Start the Application**:
    ```bash
    docker-compose up -d
    ```
 
-3. **Access the Application**:
+2. **Access the Application**:
    - Open http://localhost:3000 in your browser
    - Complete the welcome wizard to configure Plex integration
+
+The Docker image automatically handles data directory creation and permissions - no setup required!
+
+### Customizing User Permissions
+
+If you need to customize the user/group IDs for your specific system, you can set the `PUID` and `PGID` environment variables:
+
+```yaml
+environment:
+  - PUID=1000    # Your user ID
+  - PGID=1000    # Your group ID
+```
+
+To find your user and group IDs:
+```bash
+id $USER
+```
 
 ### Dockerfile
 
