@@ -34,6 +34,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Install system dependencies needed by the app
 RUN apk add --no-cache ffmpeg python3 py3-pip shadow
 
+# Install Prisma CLI for database initialization
+RUN npm install -g prisma@latest
+
 # Add user and group with configurable UID/GID
 ARG PUID=1001
 ARG PGID=1001
