@@ -4,6 +4,7 @@ import { promises as fs } from "fs"
 import { prisma } from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { getProcessedFilesDir } from "@/lib/data-dirs"
 
 // HEAD-like availability check
 export async function GET(
@@ -30,7 +31,7 @@ export async function GET(
       bookmark.workspace.memberships.some(m => m.userId === session.user.id)
     if (!hasAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const clipPath = path.join(process.cwd(), 'processed-files', params.id, 'clips', `${params.bookmarkId}.mp4`)
+    const clipPath = path.join(getProcessedFilesDir(), params.id, 'clips', `${params.bookmarkId}.mp4`)
     try {
       await fs.stat(clipPath)
       return NextResponse.json({ ready: true, status: 'completed', progressPercent: 100 })

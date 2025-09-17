@@ -3,6 +3,7 @@ import { promises as fs } from 'fs'
 import { createWriteStream } from 'fs'
 import path from 'path'
 import { prisma } from '@/lib/prisma'
+import { getProcessedFilesDir } from '@/lib/data-dirs'
 import ffmpeg from 'ffmpeg-static'
 import axios from 'axios'
 
@@ -63,7 +64,7 @@ export class WorkspaceProcessingService {
       console.log(`Workspace status updated successfully`)
 
       // Step 1: Download source file from Plex (10% progress)
-      let sourceFilePath = path.join(process.cwd(), 'processed-files', workspaceId, 'source.mp4')
+      let sourceFilePath = path.join(getProcessedFilesDir(), workspaceId, 'source.mp4')
       if (doDownload) {
         console.log('Step 1: Downloading source file from Plex...')
         sourceFilePath = await this.downloadSourceFile(plexKey, plexServerId, workspaceId)
@@ -72,7 +73,7 @@ export class WorkspaceProcessingService {
       await this.updateWorkspaceProgress(workspaceId, 10)
 
       // Step 2: Convert to MP4 H.264 (70% progress)
-      let mp4FilePath = path.join(process.cwd(), 'processed-files', workspaceId, 'processed.mp4')
+      let mp4FilePath = path.join(getProcessedFilesDir(), workspaceId, 'processed.mp4')
       if (doConvert) {
         console.log('Step 2: Converting to MP4 H.264...')
         mp4FilePath = await this.convertToMP4(sourceFilePath, workspaceId, jobId)
@@ -115,7 +116,7 @@ export class WorkspaceProcessingService {
   }
 
   private async downloadSourceFile(plexKey: string, plexServerId: string, workspaceId: string): Promise<string> {
-    const outputDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const outputDir = path.join(getProcessedFilesDir(), workspaceId)
     await fs.mkdir(outputDir, { recursive: true })
 
     const sourceFilePath = path.join(outputDir, 'source.mp4')
@@ -257,7 +258,7 @@ export class WorkspaceProcessingService {
   }
 
   private async convertToMP4(sourceFilePath: string, workspaceId: string, jobId: string): Promise<string> {
-    const outputDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const outputDir = path.join(getProcessedFilesDir(), workspaceId)
     const mp4FilePath = path.join(outputDir, 'processed.mp4')
 
     return new Promise((resolve, reject) => {
@@ -314,7 +315,7 @@ export class WorkspaceProcessingService {
   }
 
   private async generatePreviewFrames(mp4FilePath: string, workspaceId: string, jobId: string): Promise<void> {
-    const outputDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const outputDir = path.join(getProcessedFilesDir(), workspaceId)
     const framesDir = path.join(outputDir, 'frames')
     await fs.mkdir(framesDir, { recursive: true })
 
@@ -368,7 +369,7 @@ export class WorkspaceProcessingService {
   }
 
   private async generateClipsForBookmarks(mp4FilePath: string, workspaceId: string): Promise<void> {
-    const clipsDir = path.join(process.cwd(), 'processed-files', workspaceId, 'clips')
+    const clipsDir = path.join(getProcessedFilesDir(), workspaceId, 'clips')
     await fs.mkdir(clipsDir, { recursive: true })
 
     const bookmarks = await prisma.bookmark.findMany({

@@ -7,6 +7,8 @@ on:
     paths:
       - 'web/**'
       - '.github/workflows/docker-build-deploy.yml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 env:
@@ -42,6 +44,9 @@ jobs:
             type=ref,event=pr
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

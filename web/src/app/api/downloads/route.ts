@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getProcessedFilesDir } from "@/lib/data-dirs"
 import path from "path"
 import { promises as fs } from "fs"
 import { spawn } from "child_process"
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
     )
 
     // If clips are pre-generated, just mark jobs completed and return file paths
-    const workspaceDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const workspaceDir = path.join(getProcessedFilesDir(), workspaceId)
     const clipsDir = path.join(workspaceDir, 'clips')
     await fs.mkdir(clipsDir, { recursive: true })
 

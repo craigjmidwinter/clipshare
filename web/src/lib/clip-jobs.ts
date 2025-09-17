@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getProcessedFilesDir } from '@/lib/data-dirs'
 import path from 'path'
 import { promises as fs } from 'fs'
 import { spawn } from 'child_process'
@@ -47,7 +48,7 @@ export async function scheduleClipGeneration(spec: BookmarkSpec, debounceMs = 12
       console.log('[clips] start job', { bookmarkId: spec.id, workspaceId: spec.workspaceId })
       await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'processing', progressPercent: 10 } })
 
-      const workspaceDir = path.join(process.cwd(), 'processed-files', spec.workspaceId)
+      const workspaceDir = path.join(getProcessedFilesDir(), spec.workspaceId)
       const sourcePath = path.join(workspaceDir, 'processed.mp4')
       const clipsDir = path.join(workspaceDir, 'clips')
       await fs.mkdir(clipsDir, { recursive: true })
@@ -79,7 +80,7 @@ export async function scheduleClipGeneration(spec: BookmarkSpec, debounceMs = 12
 }
 
 export async function deleteClipForBookmark(workspaceId: string, bookmarkId: string) {
-  const clipPath = path.join(process.cwd(), 'processed-files', workspaceId, 'clips', `${bookmarkId}.mp4`)
+  const clipPath = path.join(getProcessedFilesDir(), workspaceId, 'clips', `${bookmarkId}.mp4`)
   try { await fs.rm(clipPath, { force: true }) } catch {}
 }
 

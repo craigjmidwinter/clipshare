@@ -226,3 +226,8 @@ build/
 .data/
 .cursor/
 web/prisma/dev.db
+
+# Docker data directories and runtime files
+data/
+docker-compose.override.yml
+.env.docker.local
