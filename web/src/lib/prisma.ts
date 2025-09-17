@@ -1,4 +1,4 @@
-import { getDbDir, ensureDataDirs } from './data-dirs.js'
+import { getDbDir, ensureDataDirs } from './data-dirs'
 import path from 'path'
 
 // Set default DATABASE_URL if not provided - must be done before importing PrismaClient
