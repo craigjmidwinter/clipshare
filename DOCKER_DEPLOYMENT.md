@@ -80,11 +80,27 @@ The GitHub Actions workflow (`.github/workflows/docker-build-deploy.yml`) will:
 
 ## Docker Image Details
 
-- **Base Image**: Node.js 18 Alpine Linux
+- **Base Image**: Node.js 20 Alpine Linux (matches project's Node.js version requirements)
 - **Application**: Next.js application with standalone output
 - **Dependencies**: Includes FFmpeg and Python for video processing
 - **Port**: Exposes port 3000
 - **User**: Runs as non-root user for security
+
+## CI/CD Workflows
+
+### Docker Build Test (`docker-build-test.yml`)
+- **Triggers**: On pull requests and pushes to main that affect the `web/` directory
+- **Purpose**: Ensures Docker images build successfully and basic functionality works
+- **Blocks**: Prevents merging PRs if Docker build fails
+- **Tests**: 
+  - Docker image builds without errors
+  - Container starts successfully
+  - Application responds to HTTP requests
+
+### Docker Build and Publish (`docker-build-deploy.yml`)
+- **Triggers**: On pushes to main branch only
+- **Purpose**: Builds and publishes production images to Google Container Registry
+- **Requirements**: Requires proper GCP authentication and secrets
 
 ## Image URLs
 
