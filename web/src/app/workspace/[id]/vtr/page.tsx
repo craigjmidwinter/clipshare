@@ -1094,7 +1094,7 @@ export default function VTRControlPage() {
                   type="text"
                   value={connectionSettings.host}
                   onChange={(e) => setConnectionSettings({ ...connectionSettings, host: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                 />
               </div>
               <div>
@@ -1105,7 +1105,7 @@ export default function VTRControlPage() {
                   type="number"
                   value={connectionSettings.port}
                   onChange={(e) => setConnectionSettings({ ...connectionSettings, port: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                 />
               </div>
               <div>
@@ -1116,7 +1116,7 @@ export default function VTRControlPage() {
                   type="password"
                   value={connectionSettings.password}
                   onChange={(e) => setConnectionSettings({ ...connectionSettings, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                 />
               </div>
             </div>
@@ -1208,7 +1208,7 @@ export default function VTRControlPage() {
                           value={localClipsPath}
                           onChange={(e) => setLocalClipsPath(e.target.value)}
                           placeholder="/Users/username/Downloads/clips_folder"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                         />
                         <button
                           onClick={() => {

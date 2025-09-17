@@ -9,29 +9,31 @@ import { getProcessedFilesDir } from "@/lib/data-dirs"
 // HEAD-like availability check
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; bookmarkId: string } }
+  { params }: { params: Promise<{ id: string; bookmarkId: string }> }
 ) {
   try {
+    const { id: workspaceId, bookmarkId } = await params
+    
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Verify access to workspace via bookmark
     const bookmark = await prisma.bookmark.findUnique({
-      where: { id: params.bookmarkId },
+      where: { id: bookmarkId },
       include: {
         workspace: {
           select: { producerId: true, memberships: { select: { userId: true } } }
         }
       }
     })
-    if (!bookmark || bookmark.workspaceId !== params.id) {
+    if (!bookmark || bookmark.workspaceId !== workspaceId) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
     const hasAccess = bookmark.workspace.producerId === session.user.id ||
       bookmark.workspace.memberships.some(m => m.userId === session.user.id)
     if (!hasAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const clipPath = path.join(getProcessedFilesDir(), params.id, 'clips', `${params.bookmarkId}.mp4`)
+    const clipPath = path.join(getProcessedFilesDir(), workspaceId, 'clips', `${bookmarkId}.mp4`)
     try {
       await fs.stat(clipPath)
       return NextResponse.json({ ready: true, status: 'completed', progressPercent: 100 })
@@ -40,7 +42,7 @@ export async function GET(
       const job = await prisma.processingJob.findFirst({
         where: {
           type: 'export_clip',
-          payloadJson: { contains: `"bookmarkId":"${params.bookmarkId}"` }
+          payloadJson: { contains: `"bookmarkId":"${bookmarkId}"` }
         },
         orderBy: { updatedAt: 'desc' }
       })

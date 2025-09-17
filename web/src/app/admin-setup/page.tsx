@@ -182,7 +182,7 @@ export default function AdminSetupPage() {
                     id="serverUrl"
                     value={config.serverUrl}
                     onChange={(e) => handleInputChange("serverUrl", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                     placeholder="http://localhost:32400"
                   />
                 </div>
@@ -196,7 +196,7 @@ export default function AdminSetupPage() {
                     id="serverToken"
                     value={config.serverToken}
                     onChange={(e) => handleInputChange("serverToken", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                     placeholder="Enter your Plex Server Token"
                   />
                 </div>

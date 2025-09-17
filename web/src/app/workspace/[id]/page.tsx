@@ -29,6 +29,98 @@ import {
 import VideoPlayer from "@/components/VideoPlayer"
 import NLETimeline from "@/components/NLETimeline"
 import OBSExportModal from "@/components/OBSExportModal"
+import ClipPreviewModal from "@/components/ClipPreviewModal"
+import { useClipStatus } from "@/hooks/useClipStatus"
+
+// Download button component with loading state
+function DownloadButton({ 
+  bookmark, 
+  workspaceId, 
+  isDownloading, 
+  onDownload 
+}: { 
+  bookmark: any, 
+  workspaceId: string, 
+  isDownloading: boolean, 
+  onDownload: (bookmarkId: string) => void 
+}) {
+  const { clipStatus } = useClipStatus(workspaceId, bookmark.id)
+  
+  const isProcessing = clipStatus?.status === 'processing' || clipStatus?.status === 'pending'
+  const isReady = clipStatus?.ready === true
+  
+  return (
+    <button 
+      className={`${
+        isProcessing 
+          ? 'text-orange-400' 
+          : isReady 
+            ? 'text-gray-400 hover:text-green-600' 
+            : 'text-gray-300 cursor-not-allowed'
+      }`}
+      title={
+        isProcessing 
+          ? `Processing... ${clipStatus?.progressPercent || 0}%`
+          : isReady 
+            ? "Download bookmark"
+            : "Clip not ready"
+      }
+      onClick={() => onDownload(bookmark.id)}
+      disabled={!isReady || isDownloading}
+    >
+      {isProcessing ? (
+        <div className="h-4 w-4 border border-current border-t-transparent rounded-full animate-spin" />
+      ) : isDownloading ? (
+        <ClockIcon className="h-4 w-4 animate-spin" />
+      ) : (
+        <ArrowDownTrayIcon className="h-4 w-4" />
+      )}
+    </button>
+  )
+}
+
+// Preview button component with loading state
+function PreviewButton({ 
+  bookmark, 
+  workspaceId, 
+  onPreview 
+}: { 
+  bookmark: any, 
+  workspaceId: string, 
+  onPreview: (bookmark: any) => void 
+}) {
+  const { clipStatus } = useClipStatus(workspaceId, bookmark.id)
+  
+  const isProcessing = clipStatus?.status === 'processing' || clipStatus?.status === 'pending'
+  const isReady = clipStatus?.ready === true
+  
+  return (
+    <button 
+      className={`${
+        isProcessing 
+          ? 'text-orange-400' 
+          : isReady 
+            ? 'text-gray-400 hover:text-blue-600' 
+            : 'text-gray-300 cursor-not-allowed'
+      }`}
+      title={
+        isProcessing 
+          ? `Processing... ${clipStatus?.progressPercent || 0}%`
+          : isReady 
+            ? "Preview clip"
+            : "Clip not ready"
+      }
+      onClick={() => onPreview(bookmark)}
+      disabled={!isReady}
+    >
+      {isProcessing ? (
+        <div className="h-4 w-4 border border-current border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <EyeIcon className="h-4 w-4" />
+      )}
+    </button>
+  )
+}
 
 interface Workspace {
   id: string
@@ -104,6 +196,8 @@ export default function WorkspaceDetailPage() {
   const [showAddCollaborator, setShowAddCollaborator] = useState(false)
   const [newCollaborator, setNewCollaborator] = useState("")
   const [addingCollaborator, setAddingCollaborator] = useState(false)
+  const [availableUsers, setAvailableUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [bookmarkSearch, setBookmarkSearch] = useState("")
   const [bookmarkFilter, setBookmarkFilter] = useState<"all" | "mine" | "others" | "locked" | "unlocked">("all")
   const [creatingBookmark, setCreatingBookmark] = useState(false)
@@ -127,6 +221,14 @@ export default function WorkspaceDetailPage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  
+  // Shot cuts and snapping state
+  const [shotCuts, setShotCuts] = useState<any[]>([])
+  const [snappingSettings, setSnappingSettings] = useState<any>(null)
+  
+  // Clip preview state
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [selectedBookmarkForPreview, setSelectedBookmarkForPreview] = useState<any>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -155,11 +257,68 @@ export default function WorkspaceDetailPage() {
       }
       
       setWorkspace(data.workspace)
+      
+      // Fetch shot cuts and snapping settings if workspace is processed
+      if (data.workspace.processingStatus === "completed") {
+        await Promise.all([
+          fetchShotCuts(),
+          fetchSnappingSettings()
+        ])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch workspace")
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchShotCuts = async () => {
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/shot-cuts`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setShotCuts(data.shotCuts)
+      }
+    } catch (err) {
+      console.error("Failed to fetch shot cuts:", err)
+    }
+  }
+
+  const fetchSnappingSettings = async () => {
+    try {
+      const key = `snappingSettings:${workspaceId}`
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null
+      if (raw) {
+        setSnappingSettings(JSON.parse(raw))
+      } else {
+        const defaults = {
+          snappingEnabled: true,
+          snapDistanceMs: 2000,
+          confidenceThreshold: 0.7,
+        }
+        setSnappingSettings(defaults)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(defaults))
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load snapping settings:", err)
+    }
+  }
+
+  const updateSnappingSettings = async (updates: any) => {
+    // Client-side preference: update state and persist to localStorage
+    setSnappingSettings((prev: any) => {
+      const next = { ...prev, ...updates }
+      try {
+        const key = `snappingSettings:${workspaceId}`
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(next))
+        }
+      } catch {}
+      return next
+    })
   }
 
   const formatDuration = (ms: number) => {
@@ -186,6 +345,33 @@ export default function WorkspaceDetailPage() {
   }
 
   const isProducer = workspace?.producer.id === session?.user?.id
+
+  const fetchAvailableUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const response = await fetch("/api/plex/users")
+      const data = await response.json()
+      
+      if (data.success) {
+        // Filter out users who are already collaborators
+        const existingCollaborators = workspace?.memberships
+          .filter(m => m.role === "collaborator")
+          .map(m => m.user.plexUsername) || []
+        
+        const filteredUsers = data.users.filter((user: any) => 
+          !existingCollaborators.includes(user.username)
+        )
+        
+        setAvailableUsers(filteredUsers)
+      } else {
+        setError(data.error || "Failed to fetch available users")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch available users")
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
 
   const handleAddCollaborator = async () => {
     if (!newCollaborator.trim() || !workspace) return
@@ -215,6 +401,7 @@ export default function WorkspaceDetailPage() {
       await fetchWorkspace()
       setNewCollaborator("")
       setShowAddCollaborator(false)
+      setAvailableUsers([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add collaborator")
     } finally {
@@ -455,6 +642,16 @@ export default function WorkspaceDetailPage() {
     setEditingLabel("")
   }
 
+  const handlePreviewClip = (bookmark: any) => {
+    setSelectedBookmarkForPreview(bookmark)
+    setPreviewModalOpen(true)
+  }
+
+  const handleClosePreview = () => {
+    setPreviewModalOpen(false)
+    setSelectedBookmarkForPreview(null)
+  }
+
   const handleDownloadBookmark = async (bookmarkId: string) => {
     if (!workspace) return
 
@@ -540,7 +737,7 @@ export default function WorkspaceDetailPage() {
     }
   }
 
-  const handleReprocessWorkspace = async (options?: { download?: boolean; convert?: boolean; frames?: boolean }) => {
+  const handleReprocessWorkspace = async (options?: { download?: boolean; convert?: boolean; frames?: boolean; shotCuts?: boolean }) => {
     if (!workspace) return
 
     try {
@@ -556,6 +753,7 @@ export default function WorkspaceDetailPage() {
           download: options?.download ?? true,
           convert: options?.convert ?? true,
           frames: options?.frames ?? true,
+          shotCuts: options?.shotCuts ?? true,
         })
       })
 
@@ -812,10 +1010,11 @@ export default function WorkspaceDetailPage() {
                           Re-process
                         </summary>
                         <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded shadow z-10">
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: true })}>Regenerate frames</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: true, frames: false })}>Reconvert MP4</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: true, convert: false, frames: false })}>Re-download source</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => setShowReprocessDialog(true)}>Full re-process…</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: true })}>Regenerate frames</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: true, frames: false })}>Reconvert MP4</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: true, convert: false, frames: false })}>Re-download source</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: false, shotCuts: true })}>Re-detect shot cuts</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => setShowReprocessDialog(true)}>Full re-process…</button>
                         </div>
                       </details>
                     </div>
@@ -923,6 +1122,10 @@ export default function WorkspaceDetailPage() {
                   onPlayPause={handleVideoPlayPause}
                   onStep={handleVideoStep}
                   workspaceId={workspace.id}
+                  shotCuts={shotCuts}
+                  snappingSettings={snappingSettings}
+                  onSnappingSettingsUpdate={updateSnappingSettings}
+                  isProducer={isProducer}
                 />
               </div>
             </div>
@@ -969,7 +1172,10 @@ export default function WorkspaceDetailPage() {
                   <div className="mt-4">
                     {!showAddCollaborator ? (
                       <button 
-                        onClick={() => setShowAddCollaborator(true)}
+                        onClick={() => {
+                          setShowAddCollaborator(true)
+                          fetchAvailableUsers()
+                        }}
                         className="w-full text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center justify-center"
                       >
                         <PlusIcon className="h-4 w-4 mr-1" />
@@ -977,32 +1183,64 @@ export default function WorkspaceDetailPage() {
                       </button>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex space-x-2">
-                          <input
-                            type="text"
-                            placeholder="Plex username"
-                            value={newCollaborator}
-                            onChange={(e) => setNewCollaborator(e.target.value)}
-                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                            onKeyPress={(e) => e.key === 'Enter' && handleAddCollaborator()}
-                          />
-                          <button
-                            onClick={handleAddCollaborator}
-                            disabled={addingCollaborator || !newCollaborator.trim()}
-                            className="px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {addingCollaborator ? "Adding..." : "Add"}
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setShowAddCollaborator(false)
-                            setNewCollaborator("")
-                          }}
-                          className="w-full text-sm text-gray-500 hover:text-gray-700"
-                        >
-                          Cancel
-                        </button>
+                        {loadingUsers ? (
+                          <div className="flex items-center justify-center py-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
+                            <span className="ml-2 text-sm text-gray-600">Loading available users...</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <select
+                              value={newCollaborator}
+                              onChange={(e) => setNewCollaborator(e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
+                            >
+                              <option value="">Select a user to add as collaborator</option>
+                              {availableUsers.map((user) => (
+                                <option key={user.id} value={user.username}>
+                                  {user.title || user.username} {user.email && `(${user.email})`}
+                                </option>
+                              ))}
+                            </select>
+                            {availableUsers.length === 0 && (
+                              <div className="text-center py-4">
+                                <p className="text-sm text-gray-500 mb-2">
+                                  No additional users available from your Plex server
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  To add collaborators, share your Plex server libraries with friends first at{' '}
+                                  <a 
+                                    href="https://app.plex.tv/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-orange-600 hover:text-orange-700 underline"
+                                  >
+                                    app.plex.tv
+                                  </a>
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={handleAddCollaborator}
+                                disabled={addingCollaborator || !newCollaborator.trim()}
+                                className="flex-1 px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {addingCollaborator ? "Adding..." : "Add Collaborator"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowAddCollaborator(false)
+                                  setNewCollaborator("")
+                                  setAvailableUsers([])
+                                }}
+                                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1061,7 +1299,7 @@ export default function WorkspaceDetailPage() {
                       placeholder="Search bookmarks..."
                       value={bookmarkSearch}
                       onChange={(e) => setBookmarkSearch(e.target.value)}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                     />
                   </div>
                   
@@ -1212,20 +1450,19 @@ export default function WorkspaceDetailPage() {
                                 )}
                               </div>
                               <div className="flex items-center space-x-1">
-                                {workspace.processingStatus === "completed" && (
-                                  <button 
-                                    className="text-gray-400 hover:text-green-600"
-                                    title="Download bookmark"
-                                    onClick={() => handleDownloadBookmark(bookmark.id)}
-                                    disabled={downloadingBookmarks.includes(bookmark.id)}
-                                  >
-                                    {downloadingBookmarks.includes(bookmark.id) ? (
-                                      <ClockIcon className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <ArrowDownTrayIcon className="h-4 w-4" />
-                                    )}
-                                  </button>
-                                )}
+                                {/* Preview Button */}
+                                <PreviewButton 
+                                  bookmark={bookmark}
+                                  workspaceId={workspaceId}
+                                  onPreview={handlePreviewClip}
+                                />
+                                {/* Download Button */}
+                                <DownloadButton 
+                                  bookmark={bookmark}
+                                  workspaceId={workspaceId}
+                                  isDownloading={downloadingBookmarks.includes(bookmark.id)}
+                                  onDownload={handleDownloadBookmark}
+                                />
                                 {canEdit && !bookmark.lockedById && (
                                   <button 
                                     className="text-gray-400 hover:text-blue-600"
@@ -1475,6 +1712,16 @@ export default function WorkspaceDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clip Preview Modal */}
+      {selectedBookmarkForPreview && (
+        <ClipPreviewModal
+          isOpen={previewModalOpen}
+          onClose={handleClosePreview}
+          bookmark={selectedBookmarkForPreview}
+          workspaceId={workspaceId}
+        />
       )}
     </div>
   )

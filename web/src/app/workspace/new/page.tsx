@@ -459,7 +459,7 @@ export default function NewWorkspacePage() {
                       placeholder={`Search ${selectedLibrary.type === "movie" ? "movies" : "episodes"}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                     />
                   </div>
                 </div>
@@ -467,7 +467,7 @@ export default function NewWorkspacePage() {
                   <select
                     value={contentType}
                     onChange={(e) => setContentType(e.target.value as "all" | "movie" | "episode" | "show")}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                   >
                     <option value="all">All Content</option>
                     <option value="episode">Episodes Only</option>
@@ -704,7 +704,7 @@ export default function NewWorkspacePage() {
                         name="title"
                         required
                         defaultValue={generateWorkspaceTitle()}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                       />
                     </div>
 
@@ -718,7 +718,7 @@ export default function NewWorkspacePage() {
                         rows={4}
                         placeholder="Describe what this workspace is for..."
                         defaultValue={generateWorkspaceDescription()}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                       />
                     </div>
 

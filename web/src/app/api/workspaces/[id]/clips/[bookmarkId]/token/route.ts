@@ -13,19 +13,16 @@ function generateStreamToken(workspaceId: string, bookmarkId: string): string {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; bookmarkId: string } }
+  { params }: { params: Promise<{ id: string; bookmarkId: string }> }
 ) {
   try {
+    const { id: workspaceId, bookmarkId } = await params
+    
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    const workspaceId = params.id
-    const bookmarkId = params.bookmarkId
-
-    // Check if workspace exists and user has access
     const workspace = await prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { 

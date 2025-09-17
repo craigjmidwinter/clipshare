@@ -271,7 +271,7 @@ function BookmarkCreationModal({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g., Important Scene"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
             />
           </div>
 
@@ -285,7 +285,7 @@ function BookmarkCreationModal({
               onChange={(e) => setPublicNotes(e.target.value)}
               placeholder="Notes visible to all collaborators..."
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
             />
           </div>
 
@@ -299,7 +299,7 @@ function BookmarkCreationModal({
               onChange={(e) => setPrivateNotes(e.target.value)}
               placeholder="Your private notes..."
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
             />
           </div>
 
