@@ -16,6 +16,7 @@ export interface ProcessingJobData {
     download?: boolean
     convert?: boolean
     frames?: boolean
+    shotCuts?: boolean
   }
 }
 
@@ -35,6 +36,7 @@ export class WorkspaceProcessingService {
     const doDownload = steps?.download !== false
     const doConvert = steps?.convert !== false
     const doFrames = steps?.frames !== false
+    const doShotCuts = steps?.shotCuts !== false
 
     console.log(`=== PROCESSING SERVICE START ===`)
     console.log(`Job ID: ${jobId}`)
@@ -81,11 +83,18 @@ export class WorkspaceProcessingService {
       await this.updateJobProgress(jobId, 80)
       await this.updateWorkspaceProgress(workspaceId, 80)
 
-      // Step 3: Generate preview frames (20% progress)
-      if (doFrames) {
-        console.log('Step 3: Generating preview frames...')
-        await this.generatePreviewFrames(mp4FilePath, workspaceId, jobId)
-      }
+          // Step 3: Detect shot cuts (10% progress) - must be before frame generation
+          if (doShotCuts) {
+            console.log('Step 3: Detecting shot cuts...')
+            await this.detectShotCuts(mp4FilePath, workspaceId, jobId)
+          }
+          
+          // Step 4: Generate shot-aware preview frames (20% progress)
+          if (doFrames) {
+            console.log('Step 4: Generating shot-aware preview frames...')
+            await this.generatePreviewFrames(mp4FilePath, workspaceId, jobId)
+          }
+      
       // Generate clips for bookmarks after frames
       await this.generateClipsForBookmarks(mp4FilePath, workspaceId)
       await this.updateJobProgress(jobId, 100)
@@ -359,15 +368,55 @@ export class WorkspaceProcessingService {
     const framesDir = path.join(outputDir, 'frames')
     await fs.mkdir(framesDir, { recursive: true })
 
-    console.log(`Generating preview frames for ${mp4FilePath} using FFmpeg...`)
+    console.log(`Generating shot-aware preview frames for ${mp4FilePath} using FFmpeg...`)
 
-    // Use system FFmpeg to extract frames (1 fps, scaled small like YouTube thumbnails)
+    // Get existing shot cuts to generate frames at shot boundaries
+    const shotCuts = await prisma.shotCut.findMany({
+      where: { workspaceId },
+      orderBy: { timestampMs: 'asc' }
+    })
+
+    // Get workspace duration
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { contentDuration: true }
+    })
+
+    if (!workspace) {
+      throw new Error("Workspace not found")
+    }
+
+    // Create frame generation points: shot cuts + regular intervals
+    const frameTimes: number[] = []
+    
+    // Add shot cut times (in seconds)
+    shotCuts.forEach(cut => {
+      const timeSeconds = cut.timestampMs / 1000
+      if (timeSeconds >= 0 && timeSeconds <= workspace.contentDuration) {
+        frameTimes.push(timeSeconds)
+      }
+    })
+
+    // Add regular intervals (every 10 seconds) to fill gaps
+    for (let sec = 0; sec <= workspace.contentDuration; sec += 10) {
+      if (!frameTimes.some(t => Math.abs(t - sec) < 1)) { // Avoid duplicates
+        frameTimes.push(sec)
+      }
+    }
+
+    // Sort frame times
+    frameTimes.sort((a, b) => a - b)
+
+    console.log(`Generating ${frameTimes.length} frames at shot cuts and regular intervals`)
+
+    // Use FFmpeg to extract frames at specific times
     return new Promise((resolve, reject) => {
       const frameProcess = spawn('ffmpeg', [
         '-i', mp4FilePath,
-        '-vf', 'fps=1,scale=160:-1:flags=lanczos', // 1 frame/sec, small size
+        '-vf', `select='${frameTimes.map(t => `eq(t,${t})`).join('+')}',scale=160:-1:flags=lanczos`,
+        '-vsync', 'vfr', // Variable frame rate to match our selection
         '-q:v', '4', // reasonable thumbnail quality
-        path.join(framesDir, 'frame_s%06d.jpg'),
+        path.join(framesDir, 'shot_frame_%06d.jpg'),
         '-y'
       ], {
         stdio: ['pipe', 'pipe', 'pipe']
@@ -386,26 +435,75 @@ export class WorkspaceProcessingService {
       let stderr = ''
       frameProcess.stderr?.on('data', (data) => {
         stderr += data.toString()
-        console.log(`FFmpeg frames: ${data.toString().trim()}`)
+        console.log(`FFmpeg shot frames: ${data.toString().trim()}`)
       })
 
       frameProcess.on('close', async (code) => {
         clearInterval(progressInterval)
         if (code === 0) {
-          console.log(`Preview frames generated in ${framesDir}`)
+          console.log(`Shot-aware preview frames generated in ${framesDir}`)
+          
+          // Store frame metadata for shot-aware lookup
+          await this.storeFrameMetadata(workspaceId, frameTimes, shotCuts)
+          
           resolve()
         } else {
-          console.error(`FFmpeg frames stderr: ${stderr}`)
-          reject(new Error(`Frame generation process exited with code ${code}: ${stderr}`))
+          console.error(`FFmpeg shot frames stderr: ${stderr}`)
+          reject(new Error(`Shot frame generation process exited with code ${code}: ${stderr}`))
         }
       })
 
       frameProcess.on('error', (error) => {
         clearInterval(progressInterval)
-        console.error('Frame generation error:', error)
+        console.error('Shot frame generation error:', error)
         reject(error)
       })
     })
+  }
+
+  private async storeFrameMetadata(workspaceId: string, frameTimes: number[], shotCuts: any[]): Promise<void> {
+    // Store frame metadata in a JSON file for shot-aware lookup
+    const outputDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const metadataFile = path.join(outputDir, 'frame_metadata.json')
+    
+    const metadata = {
+      frameTimes,
+      shotCuts: shotCuts.map(cut => ({
+        timestampMs: cut.timestampMs,
+        confidence: cut.confidence,
+        detectionMethod: cut.detectionMethod
+      })),
+      generatedAt: new Date().toISOString()
+    }
+    
+    await fs.writeFile(metadataFile, JSON.stringify(metadata, null, 2))
+    console.log(`Frame metadata stored in ${metadataFile}`)
+  }
+
+  private async detectShotCuts(mp4FilePath: string, workspaceId: string, jobId: string): Promise<void> {
+    console.log(`Detecting shot cuts for ${mp4FilePath}...`)
+
+    // Get workspace info for duration and title
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { contentTitle: true, contentDuration: true }
+    })
+
+    if (!workspace) {
+      throw new Error("Workspace not found")
+    }
+
+    // Import and use the shot cut detection service
+    const { ShotCutDetectionService } = await import('@/lib/shot-cut-detection-service')
+    const detectionService = ShotCutDetectionService.getInstance()
+    
+    // Use the actual job ID for shot cut detection
+    await detectionService.detectShotCuts(jobId, {
+      workspaceId,
+      contentTitle: workspace.contentTitle || 'Unknown Content'
+    })
+
+    console.log(`Shot cut detection completed for workspace ${workspaceId}`)
   }
 
   private async generateClipsForBookmarks(mp4FilePath: string, workspaceId: string): Promise<void> {

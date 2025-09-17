@@ -127,6 +127,10 @@ export default function WorkspaceDetailPage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  
+  // Shot cuts and snapping state
+  const [shotCuts, setShotCuts] = useState<any[]>([])
+  const [snappingSettings, setSnappingSettings] = useState<any>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -155,11 +159,68 @@ export default function WorkspaceDetailPage() {
       }
       
       setWorkspace(data.workspace)
+      
+      // Fetch shot cuts and snapping settings if workspace is processed
+      if (data.workspace.processingStatus === "completed") {
+        await Promise.all([
+          fetchShotCuts(),
+          fetchSnappingSettings()
+        ])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch workspace")
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchShotCuts = async () => {
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/shot-cuts`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setShotCuts(data.shotCuts)
+      }
+    } catch (err) {
+      console.error("Failed to fetch shot cuts:", err)
+    }
+  }
+
+  const fetchSnappingSettings = async () => {
+    try {
+      const key = `snappingSettings:${workspaceId}`
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null
+      if (raw) {
+        setSnappingSettings(JSON.parse(raw))
+      } else {
+        const defaults = {
+          snappingEnabled: true,
+          snapDistanceMs: 2000,
+          confidenceThreshold: 0.7,
+        }
+        setSnappingSettings(defaults)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(defaults))
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load snapping settings:", err)
+    }
+  }
+
+  const updateSnappingSettings = async (updates: any) => {
+    // Client-side preference: update state and persist to localStorage
+    setSnappingSettings((prev: any) => {
+      const next = { ...prev, ...updates }
+      try {
+        const key = `snappingSettings:${workspaceId}`
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(next))
+        }
+      } catch {}
+      return next
+    })
   }
 
   const formatDuration = (ms: number) => {
@@ -540,7 +601,7 @@ export default function WorkspaceDetailPage() {
     }
   }
 
-  const handleReprocessWorkspace = async (options?: { download?: boolean; convert?: boolean; frames?: boolean }) => {
+  const handleReprocessWorkspace = async (options?: { download?: boolean; convert?: boolean; frames?: boolean; shotCuts?: boolean }) => {
     if (!workspace) return
 
     try {
@@ -556,6 +617,7 @@ export default function WorkspaceDetailPage() {
           download: options?.download ?? true,
           convert: options?.convert ?? true,
           frames: options?.frames ?? true,
+          shotCuts: options?.shotCuts ?? true,
         })
       })
 
@@ -812,10 +874,11 @@ export default function WorkspaceDetailPage() {
                           Re-process
                         </summary>
                         <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded shadow z-10">
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: true })}>Regenerate frames</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: true, frames: false })}>Reconvert MP4</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: true, convert: false, frames: false })}>Re-download source</button>
-                          <button className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100" onClick={() => setShowReprocessDialog(true)}>Full re-process…</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: true })}>Regenerate frames</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: true, frames: false })}>Reconvert MP4</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: true, convert: false, frames: false })}>Re-download source</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => handleReprocessWorkspace({ download: false, convert: false, frames: false, shotCuts: true })}>Re-detect shot cuts</button>
+                          <button className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-gray-100" onClick={() => setShowReprocessDialog(true)}>Full re-process…</button>
                         </div>
                       </details>
                     </div>
@@ -923,6 +986,10 @@ export default function WorkspaceDetailPage() {
                   onPlayPause={handleVideoPlayPause}
                   onStep={handleVideoStep}
                   workspaceId={workspace.id}
+                  shotCuts={shotCuts}
+                  snappingSettings={snappingSettings}
+                  onSnappingSettingsUpdate={updateSnappingSettings}
+                  isProducer={isProducer}
                 />
               </div>
             </div>
@@ -983,7 +1050,7 @@ export default function WorkspaceDetailPage() {
                             placeholder="Plex username"
                             value={newCollaborator}
                             onChange={(e) => setNewCollaborator(e.target.value)}
-                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                             onKeyPress={(e) => e.key === 'Enter' && handleAddCollaborator()}
                           />
                           <button
@@ -1061,7 +1128,7 @@ export default function WorkspaceDetailPage() {
                       placeholder="Search bookmarks..."
                       value={bookmarkSearch}
                       onChange={(e) => setBookmarkSearch(e.target.value)}
-                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                     />
                   </div>
                   

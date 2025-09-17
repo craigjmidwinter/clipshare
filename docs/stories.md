@@ -178,7 +178,106 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - Export settings modal (quality, format, naming convention)
   - Export history with re-download capabilities
 
-### 7) OBS VTR Integration for Live Production
+### 7) Timeline Snapping with Shot Cut Detection
+- As a Collaborator, I can enable/disable timeline snapping when creating or editing bookmarks, so I can precisely align clip boundaries with natural shot cuts in the video.
+- As a Producer, I can see visual indicators of detected shot cuts on the timeline and control snapping behavior for all collaborators in the workspace.
+- **Acceptance Criteria**
+  - Shot cut detection runs automatically during workspace processing using computer vision analysis
+  - Detected cuts are stored with frame-accurate timestamps and confidence scores
+  - Snapping toggle is available in timeline controls with visual indicator of current state
+  - When snapping is enabled, bookmark handles (in/out points) snap to nearby cuts within configurable distance threshold
+  - Shot cuts are visually indicated on the timeline by breaking the frame ribbon at cut points
+  - Snapping distance is configurable (default: ±2 seconds, range: 0.5-10 seconds)
+  - Snapping behavior works for both drag operations and keyboard nudge controls
+  - Producer can override snapping settings for the entire workspace
+  - Cut detection confidence threshold is configurable (default: 0.7, range: 0.3-0.95)
+- **UI Requirements**
+  - **Timeline Controls**
+    - Snapping toggle button with magnet icon and visual state indicator (enabled/disabled)
+    - Snapping distance slider with live preview of snap zones
+    - Cut detection confidence slider with tooltip explaining threshold impact
+    - Visual feedback when handles snap to cuts (highlighted cut line, snap indicator)
+  - **Timeline Visualization**
+    - Frame ribbon breaks at detected shot cuts with subtle vertical lines
+    - Cut lines are color-coded by confidence level (high confidence: darker, low confidence: lighter)
+    - Hover tooltip shows cut timestamp and confidence score
+    - Zoom levels affect cut line visibility (show major cuts at all zoom levels)
+  - **Snapping Behavior**
+    - Smooth snap animation when handles approach cut points
+    - Snap zones highlighted with subtle background color when dragging
+    - Keyboard nudge controls respect snapping when enabled
+    - Snap indicator appears briefly when snapping occurs
+  - **Producer Controls**
+    - Workspace-level snapping settings override individual user preferences
+    - Cut detection re-run option with progress indicator
+    - Export cut detection data for external analysis
+- **Technical Requirements**
+  - **Shot Cut Detection Algorithm**
+    - Use OpenCV or similar computer vision library for frame difference analysis
+    - Implement histogram comparison and edge detection for cut detection
+    - Process video during workspace creation/processing phase
+    - Store results in database with timestamps and confidence scores
+  - **Database Schema Extensions**
+    ```sql
+    -- Add to existing schema
+    CREATE TABLE shot_cuts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      timestamp_ms INTEGER NOT NULL,
+      confidence REAL NOT NULL,
+      detection_method TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE workspace_snapping_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL UNIQUE,
+      snapping_enabled BOOLEAN DEFAULT true,
+      snap_distance_ms INTEGER DEFAULT 2000,
+      confidence_threshold REAL DEFAULT 0.7,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    ```
+  - **API Endpoints**
+    - `GET /api/workspaces/[id]/shot-cuts` - Retrieve detected cuts for workspace
+    - `POST /api/workspaces/[id]/shot-cuts/detect` - Trigger cut detection (re-run)
+    - `GET /api/workspaces/[id]/snapping-settings` - Get workspace snapping configuration
+    - `PUT /api/workspaces/[id]/snapping-settings` - Update workspace snapping settings
+  - **Processing Integration**
+    - Integrate cut detection into existing workspace processing pipeline
+    - Run cut detection after video conversion but before frame generation
+    - Store processing progress for cut detection phase
+    - Handle cut detection failures gracefully with retry options
+- **Advanced Features**
+  - **Smart Cut Detection**
+    - Multiple detection algorithms (histogram, edge, motion) with weighted results
+    - Machine learning model training on user feedback for improved accuracy
+    - Cut type classification (hard cuts, dissolves, fades) with different snapping behavior
+    - Scene boundary detection for more intelligent cut grouping
+  - **User Experience Enhancements**
+    - Snapping preferences saved per user with workspace override capability
+    - Visual cut preview when hovering over cut lines
+    - Batch operations respect snapping settings
+    - Export cut detection metadata with clips for post-production workflows
+  - **Performance Optimization**
+    - Background processing with progress indicators
+    - Efficient frame sampling for cut detection (every Nth frame)
+    - Caching of cut detection results with invalidation on video changes
+    - Lazy loading of cut data based on timeline zoom level
+- **User Experience Flow**
+  1. Workspace processing automatically detects shot cuts during video conversion
+  2. Timeline displays cut indicators as vertical breaks in frame ribbon
+  3. User enables snapping toggle in timeline controls
+  4. When dragging bookmark handles, they snap to nearby cuts within distance threshold
+  5. Visual feedback shows snap zones and successful snaps
+  6. Producer can adjust workspace-wide snapping settings affecting all collaborators
+  7. Cut detection can be re-run if initial results are unsatisfactory
+  8. Snapping behavior integrates seamlessly with existing bookmark creation workflow
+
+### 8) OBS VTR Integration for Live Production
 - As a Producer, I can export all bookmarked clips from all collaborators in a workspace and generate an OBS-compatible package that allows me to trigger clips during live recording with VTR-like functionality.
 - **Acceptance Criteria**
   - Export all bookmarks from all collaborators in a workspace as individual MP4 files
@@ -308,6 +407,8 @@ Clipshare is an internal collaboration tool that allows teams to work together o
   - `plex_servers` (id, user_id, server_url, token, name, last_sync_at, status, created_at, updated_at)
   - `plex_config` (id, client_id, client_secret, server_url, server_token, is_active, created_at, updated_at)
   - `onboarding_sessions` (id, user_id, current_step, completed_steps, wizard_data_json, created_at, updated_at)
+  - `shot_cuts` (id, workspace_id, timestamp_ms, confidence, detection_method, created_at)
+  - `workspace_snapping_settings` (id, workspace_id, snapping_enabled, snap_distance_ms, confidence_threshold, created_at, updated_at)
 - **Access Control**: Application-level permissions (no RLS needed)
 - **Realtime**: WebSocket connections for live bookmark updates
 
@@ -317,6 +418,9 @@ Clipshare is an internal collaboration tool that allows teams to work together o
 - `/api/plex/connect` → validate Plex server connection and fetch libraries
 - `/api/workspaces` → CRUD operations for workspaces
 - `/api/workspaces/[id]/process` → trigger workspace processing/re-processing
+- `/api/workspaces/[id]/shot-cuts` → retrieve detected cuts for workspace
+- `/api/workspaces/[id]/shot-cuts/detect` → trigger cut detection (re-run)
+- `/api/workspaces/[id]/snapping-settings` → get/update workspace snapping configuration
 - `/api/bookmarks` → CRUD operations for bookmarks
 - `/api/downloads` → trigger clip download jobs
 - `/api/export` → trigger clip export jobs

@@ -221,7 +221,7 @@ export default function OBSExportModal({
                   <select
                     value={config.exportFormat}
                     onChange={(e) => setConfig({ ...config, exportFormat: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                   >
                     <option value="mp4">MP4 H.264</option>
                     <option value="mov">MOV ProRes</option>
@@ -235,7 +235,7 @@ export default function OBSExportModal({
                   <select
                     value={config.quality}
                     onChange={(e) => setConfig({ ...config, quality: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                   >
                     <option value="1080p">1080p (Full HD)</option>
                     <option value="720p">720p (HD)</option>
@@ -250,7 +250,7 @@ export default function OBSExportModal({
                   <select
                     value={config.hotkeyPattern}
                     onChange={(e) => setConfig({ ...config, hotkeyPattern: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                   >
                     <option value="sequential">Sequential (F1-F12, Ctrl+F1-F12...)</option>
                     <option value="creator-based">Creator-based Grouping</option>
@@ -265,7 +265,7 @@ export default function OBSExportModal({
                   <select
                     value={config.webInterfaceTheme}
                     onChange={(e) => setConfig({ ...config, webInterfaceTheme: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
                   >
                     <option value="dark">Dark Theme</option>
                     <option value="light">Light Theme</option>

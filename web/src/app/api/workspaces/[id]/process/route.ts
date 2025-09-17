@@ -76,6 +76,7 @@ export async function POST(
       download: body?.download !== false,
       convert: body?.convert !== false,
       frames: body?.frames !== false,
+      shotCuts: body?.shotCuts !== false,
     }
 
     // Process in background (don't await)

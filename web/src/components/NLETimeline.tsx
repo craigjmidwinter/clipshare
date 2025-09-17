@@ -2,14 +2,13 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { 
-  ChevronLeftIcon, 
-  ChevronRightIcon, 
   MagnifyingGlassIcon, 
   MagnifyingGlassMinusIcon,
   PlayIcon,
   PauseIcon,
   ForwardIcon,
-  BackwardIcon
+  BackwardIcon,
+  AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
 import FramePreviewGenerator, { useFramePreviews } from './FramePreviewGenerator'
 
@@ -32,6 +31,23 @@ interface Bookmark {
   } | null
 }
 
+interface ShotCut {
+  id: string
+  timestampMs: number
+  confidence: number
+  detectionMethod: string
+  createdAt: string
+}
+
+interface SnappingSettings {
+  id: string
+  snappingEnabled: boolean
+  snapDistanceMs: number
+  confidenceThreshold: number
+  createdAt: string
+  updatedAt: string
+}
+
 interface NLETimelineProps {
   duration: number // in seconds
   currentTime: number // in seconds
@@ -46,6 +62,10 @@ interface NLETimelineProps {
   videoElement?: HTMLVideoElement | null
   frameRate?: number
   workspaceId?: string
+  shotCuts?: ShotCut[]
+  snappingSettings?: SnappingSettings
+  onSnappingSettingsUpdate?: (settings: Partial<SnappingSettings>) => void
+  isProducer?: boolean
 }
 
 export default function NLETimeline({
@@ -61,7 +81,11 @@ export default function NLETimeline({
   onStep,
   videoElement,
   frameRate = 30,
-  workspaceId
+  workspaceId,
+  shotCuts = [],
+  snappingSettings,
+  onSnappingSettingsUpdate,
+  isProducer = false
 }: NLETimelineProps) {
   
   // Debug logging (commented out to prevent console spam)
@@ -91,6 +115,7 @@ export default function NLETimeline({
   const [showNamePrompt, setShowNamePrompt] = useState(false)
   const [pendingBookmark, setPendingBookmark] = useState<{ startMs: number; endMs: number } | null>(null)
   const [clipName, setClipName] = useState("")
+  const [showSnappingSettings, setShowSnappingSettings] = useState(false)
   
   const timelineRef = useRef<HTMLDivElement>(null)
   const frameWidth = 4 // pixels per frame at zoom level 1
@@ -117,7 +142,7 @@ export default function NLETimeline({
 
   // Add document-level event listeners for drag operations
   useEffect(() => {
-    if (isDragging && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end' || isDragging === 'selection')) {
+    if (isDragging && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end' || isDragging === 'selection' || isDragging === 'playhead')) {
       const handleDocumentMouseMove = (e: MouseEvent) => {
         handleMouseMove(e)
       }
@@ -189,6 +214,36 @@ export default function NLETimeline({
     return isFinite(time) ? time : 0
   }
 
+  // Snapping logic
+  const findNearestShotCut = (timeMs: number): number | null => {
+    if (!snappingSettings?.snappingEnabled || shotCuts.length === 0) {
+      return null
+    }
+
+    const snapDistanceMs = snappingSettings.snapDistanceMs
+    const confidenceThreshold = snappingSettings.confidenceThreshold
+
+    let nearestCut: ShotCut | null = null
+    let minDistance = Infinity
+
+    for (const cut of shotCuts) {
+      if (cut.confidence < confidenceThreshold) continue
+
+      const distance = Math.abs(cut.timestampMs - timeMs)
+      if (distance <= snapDistanceMs && distance < minDistance) {
+        nearestCut = cut
+        minDistance = distance
+      }
+    }
+
+    return nearestCut ? nearestCut.timestampMs : null
+  }
+
+  const snapToShotCut = (timeMs: number): number => {
+    const nearestCut = findNearestShotCut(timeMs)
+    return nearestCut !== null ? nearestCut : timeMs
+  }
+
   const handleMouseDown = (e: React.MouseEvent, type: 'playhead' | 'in' | 'out' | 'bookmark-body' | 'bookmark-start' | 'bookmark-end', bookmarkId?: string) => {
     e.preventDefault()
     e.stopPropagation()
@@ -228,8 +283,10 @@ export default function NLETimeline({
       setSelectionStart(startTime)
       setSelectionEnd(endTime)
     } else if (isDragging === 'in' && selectionEnd !== null) {
-      setSelectionStart(Math.min(newTime, selectionEnd))
+      const snappedTime = snapToShotCut(newTime * 1000) / 1000
+      setSelectionStart(Math.min(snappedTime, selectionEnd))
     } else if (isDragging === 'out' && selectionStart !== null) {
+      const snappedTime = snapToShotCut(newTime * 1000) / 1000
       setSelectionEnd(Math.max(newTime, selectionStart))
     } else if (draggedBookmarkId && (isDragging === 'bookmark-body' || isDragging === 'bookmark-start' || isDragging === 'bookmark-end')) {
       // Calculate real-time drag preview position
@@ -243,17 +300,20 @@ export default function NLETimeline({
           const bookmarkDuration = currentEndTime - currentStartTime
           const dragOffset = newTime - dragStart.time
           const newStartTime = Math.max(0, Math.min(duration - bookmarkDuration, currentStartTime + dragOffset))
-          const newEndTime = newStartTime + bookmarkDuration
+          const snappedStartTime = snapToShotCut(newStartTime * 1000) / 1000
+          const newEndTime = snappedStartTime + bookmarkDuration
           
-          setDragPreview({ startMs: newStartTime * 1000, endMs: newEndTime * 1000 })
+          setDragPreview({ startMs: snappedStartTime * 1000, endMs: newEndTime * 1000 })
         } else if (isDragging === 'bookmark-start') {
           // Resize start time
           const newStartTime = Math.max(0, Math.min(currentEndTime - 0.1, newTime))
-          setDragPreview({ startMs: newStartTime * 1000, endMs: currentEndTime * 1000 })
+          const snappedStartTime = snapToShotCut(newStartTime * 1000) / 1000
+          setDragPreview({ startMs: snappedStartTime * 1000, endMs: currentEndTime * 1000 })
         } else if (isDragging === 'bookmark-end') {
           // Resize end time
           const newEndTime = Math.max(currentStartTime + 0.1, Math.min(duration, newTime))
-          setDragPreview({ startMs: currentStartTime * 1000, endMs: newEndTime * 1000 })
+          const snappedEndTime = snapToShotCut(newEndTime * 1000) / 1000
+          setDragPreview({ startMs: currentStartTime * 1000, endMs: snappedEndTime * 1000 })
         }
       }
     }
@@ -276,6 +336,10 @@ export default function NLETimeline({
         setSelectionStart(null)
         setSelectionEnd(null)
       } else {
+        // No real selection: treat as seek to click position
+        if (isDragging === 'selection') {
+          onSeek(dragStart.time)
+        }
         // Clear selection if it's too small or invalid
         setSelectionStart(null)
         setSelectionEnd(null)
@@ -379,7 +443,7 @@ export default function NLETimeline({
         setSelectionStart(clickedTime)
       }
     } else {
-      // Regular click - start drag-to-create selection immediately
+      // Regular action - start drag-to-create; seek will occur on mouseup if no drag
       setIsDragging('selection')
       setDragStart({ x: e.clientX, time: clickedTime })
       setSelectionStart(clickedTime)
@@ -585,6 +649,95 @@ export default function NLETimeline({
           </div>
         </div>
 
+        {/* Snapping Controls */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                // Shift+click opens settings, regular click toggles snapping
+                if (e.shiftKey) {
+                  setShowSnappingSettings(!showSnappingSettings)
+                } else if (snappingSettings && onSnappingSettingsUpdate) {
+                  onSnappingSettingsUpdate({ snappingEnabled: !snappingSettings.snappingEnabled })
+                }
+              }}
+              className={`p-2 rounded flex items-center space-x-1 ${
+                snappingSettings?.snappingEnabled 
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+              title={snappingSettings?.snappingEnabled 
+                ? "Snapping enabled - click to turn OFF (Shift+Click for settings)" 
+                : "Snapping disabled - click to turn ON (Shift+Click for settings)"
+              }
+            >
+              <AdjustmentsHorizontalIcon className="h-4 w-4" />
+              <span className="text-xs font-medium">
+                {snappingSettings?.snappingEnabled ? 'SNAP' : 'SNAP'}
+              </span>
+            </button>
+          {showSnappingSettings && snappingSettings && (
+            <div className="absolute top-12 right-0 bg-gray-800 border border-gray-600 rounded-lg p-3 z-50 min-w-64">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Snap to Shot Cuts</label>
+                  <button
+                    onClick={() => onSnappingSettingsUpdate?.({ snappingEnabled: !snappingSettings.snappingEnabled })}
+                    className={`px-3 py-1 text-xs rounded font-medium ${
+                      snappingSettings.snappingEnabled 
+                        ? 'bg-green-600 hover:bg-green-700 text-white' 
+                        : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
+                    }`}
+                  >
+                    {snappingSettings.snappingEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+                
+                {snappingSettings.snappingEnabled && (
+                  <>
+                    <div className="text-xs text-gray-400">
+                      When enabled, bookmark handles will automatically snap to detected shot cuts within the distance below.
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs text-gray-400">Snap Distance (ms)</label>
+                      <input
+                        type="range"
+                        min="500"
+                        max="10000"
+                        step="500"
+                        value={snappingSettings.snapDistanceMs}
+                        onChange={(e) => onSnappingSettingsUpdate?.({ snapDistanceMs: parseInt(e.target.value) })}
+                        className="w-full mt-1"
+                      />
+                      <div className="text-xs text-gray-400">{snappingSettings.snapDistanceMs}ms</div>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs text-gray-400">Confidence Threshold</label>
+                      <input
+                        type="range"
+                        min="0.3"
+                        max="0.95"
+                        step="0.05"
+                        value={snappingSettings.confidenceThreshold}
+                        onChange={(e) => onSnappingSettingsUpdate?.({ confidenceThreshold: parseFloat(e.target.value) })}
+                        className="w-full mt-1"
+                      />
+                      <div className="text-xs text-gray-400">{Math.round(snappingSettings.confidenceThreshold * 100)}%</div>
+                    </div>
+                  </>
+                )}
+                
+                <div className="text-xs text-gray-400">
+                  {shotCuts.length} shot cuts detected
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Zoom Controls */}
         <div className="flex items-center space-x-2">
           <button
@@ -619,6 +772,24 @@ export default function NLETimeline({
           <div className="absolute inset-0">
             {generateFramePreviews()}
           </div>
+          {/* Shot Cut Indicators */}
+          {shotCuts.map((cut) => {
+            const cutTime = cut.timestampMs / 1000
+            const position = timeToPosition(cutTime)
+            const opacity = cut.confidence >= (snappingSettings?.confidenceThreshold || 0.7) ? 1 : 0.5
+            
+            return (
+              <div
+                key={cut.id}
+                className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-10"
+                style={{ 
+                  left: position,
+                  opacity: opacity
+                }}
+                title={`Shot cut at ${formatTimecode(cutTime)} (${Math.round(cut.confidence * 100)}% confidence)`}
+              />
+            )
+          })}
           {videoElement && (
             <FramePreviewGenerator
               videoElement={videoElement}
@@ -651,6 +822,7 @@ export default function NLETimeline({
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20"
               style={{ left: timeToPosition(currentTime) }}
+              onMouseDown={(e) => handleMouseDown(e as unknown as React.MouseEvent, 'playhead')}
             >
               <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-b-2 border-transparent border-b-red-500" />
             </div>
@@ -775,7 +947,7 @@ export default function NLETimeline({
               value={clipName}
               onChange={(e) => setClipName(e.target.value)}
               placeholder="e.g., Important Scene"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 mb-4"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900 mb-4"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {

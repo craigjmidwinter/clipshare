@@ -90,6 +90,8 @@ model Workspace {
   memberships       Membership[]
   bookmarks         Bookmark[]
   processingJobs    ProcessingJob[]
+  shotCuts          ShotCut[]
+  snappingSettings  WorkspaceSnappingSettings?
 }
 
 model Membership {
@@ -187,4 +189,29 @@ model OnboardingSession {
   updatedAt       DateTime @updatedAt
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ShotCut {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  timestampMs     Int      // timestamp in milliseconds
+  confidence      Float    // confidence score 0.0-1.0
+  detectionMethod String   // "histogram", "edge", "motion", "combined"
+  createdAt       DateTime @default(now())
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, timestampMs])
+}
+
+model WorkspaceSnappingSettings {
+  id                   String   @id @default(cuid())
+  workspaceId          String   @unique
+  snappingEnabled       Boolean  @default(true)
+  snapDistanceMs        Int      @default(2000) // default 2 seconds
+  confidenceThreshold   Float    @default(0.7) // default 0.7 confidence threshold
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
