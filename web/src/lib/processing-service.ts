@@ -90,8 +90,8 @@ export class WorkspaceProcessingService {
       await this.updateJobProgress(jobId, 100)
       await this.updateWorkspaceProgress(workspaceId, 100)
 
-      // Clean up source file if we downloaded it now
-      if (doDownload) {
+      // Clean up source file if we downloaded it (not if it's a local file)
+      if (doDownload && sourceFilePath.includes('processed-files')) {
         await this.cleanupSourceFile(sourceFilePath)
       }
 
@@ -120,7 +120,7 @@ export class WorkspaceProcessingService {
 
     const sourceFilePath = path.join(outputDir, 'source.mp4')
     
-    console.log(`Starting real download from Plex for key: ${plexKey}`)
+    console.log(`Starting file access check for Plex key: ${plexKey}`)
     
     // Get Plex configuration
     const plexConfig = await prisma.plexConfig.findFirst({
@@ -133,7 +133,7 @@ export class WorkspaceProcessingService {
 
     console.log(`Using Plex server: ${plexConfig.serverUrl}`)
 
-    // First, get media info to extract the part ID
+    // First, get media info to extract the file path and part ID
     const mediaUrl = `${plexConfig.serverUrl}${plexKey}`
     console.log(`Fetching media info from: ${mediaUrl}`)
     
@@ -163,6 +163,16 @@ export class WorkspaceProcessingService {
     const partId = mediaPart.id
     
     console.log(`Found part ID: ${partId}`)
+    
+    // Check if we can access the file locally first
+    const localFilePath = await this.checkLocalFileAccess(mediaPart, plexConfig.serverUrl)
+    if (localFilePath) {
+      console.log(`✅ File accessible locally: ${localFilePath}`)
+      // Return the local file path directly - no need to copy since we'll convert it
+      return localFilePath
+    }
+    
+    console.log(`❌ File not accessible locally, downloading from Plex...`)
     
     // Construct the download URL using the same format as your curl example
     const downloadUrl = `${plexConfig.serverUrl}/library/parts/${partId}/file?download=1&X-Plex-Token=${plexConfig.serverToken}`
@@ -218,6 +228,32 @@ export class WorkspaceProcessingService {
         reject(error)
       })
     })
+  }
+
+  private async checkLocalFileAccess(mediaPart: any, plexServerUrl: string): Promise<string | null> {
+    try {
+      // Check if the Part object has a 'file' field with the local file path
+      const filePath = mediaPart.file
+      if (!filePath) {
+        console.log(`No 'file' field found in media part`)
+        return null
+      }
+
+      console.log(`Found file path in Plex data: ${filePath}`)
+      
+      // Check if the file exists and is readable
+      try {
+        await fs.access(filePath, fs.constants.R_OK)
+        console.log(`✅ File is accessible locally: ${filePath}`)
+        return filePath
+      } catch (accessError) {
+        console.log(`❌ File not accessible locally: ${filePath} - ${accessError}`)
+        return null
+      }
+    } catch (error) {
+      console.log(`Error checking local file access: ${error}`)
+      return null
+    }
   }
 
   private async convertToMP4(sourceFilePath: string, workspaceId: string, jobId: string): Promise<string> {
