@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 
 interface FramePreviewGeneratorProps {
   videoElement: HTMLVideoElement | null
@@ -25,17 +25,30 @@ export default function FramePreviewGenerator({
 }: FramePreviewGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [generatedFrames, setGeneratedFrames] = useState<Set<number>>(new Set())
+  const generatedFramesRef = useRef<Set<number>>(new Set())
   const [isGenerating, setIsGenerating] = useState(false)
+  const effectRunRef = useRef<boolean>(false)
 
   useEffect(() => {
     if (!videoElement || !canvasRef.current || isDragging) return
+    
+    // Prevent running twice
+    if (effectRunRef.current) {
+      console.log('FramePreviewGenerator: Effect already ran, skipping')
+      return
+    }
+    effectRunRef.current = true
 
     console.log('FramePreviewGenerator: Starting generation', {
       readyState: videoElement.readyState,
       videoWidth: videoElement.videoWidth,
       duration,
       zoom,
-      scrollPosition
+      scrollPosition,
+      containerWidth,
+      frameRate,
+      isDragging,
+      onFrameGeneratedRef: onFrameGenerated.toString().slice(0, 50) + '...'
     })
 
     // Wait for video to be ready
@@ -64,27 +77,39 @@ export default function FramePreviewGenerator({
         
         setIsGenerating(true)
         
-        // Calculate which frames we need to generate based on current view
+        // Calculate which frames we need to generate based on timeline display requirements
         const frameWidth = 4 // pixels per frame at zoom level 1
-        const previewInterval = Math.max(1, Math.floor(30 / zoom)) // Show every Nth frame based on zoom
-        const pixelsPerFrame = frameWidth * zoom
-        const startFrame = Math.max(0, Math.floor(scrollPosition / pixelsPerFrame))
-        const endFrame = Math.min(duration * frameRate, Math.ceil((scrollPosition + containerWidth) / pixelsPerFrame))
+        const pixelsPerSecond = isFinite(frameRate * frameWidth * zoom) && frameRate * frameWidth * zoom > 0 ? frameRate * frameWidth * zoom : 1
+        const targetTilePx = 96
+        const rawSeconds = Math.max(0.25, targetTilePx / pixelsPerSecond)
+        // snap to nice steps
+        const steps = [0.25, 0.5, 1, 2, 5, 10, 30, 60]
+        const secondsPerThumb = steps.reduce((prev, curr) => Math.abs(curr - rawSeconds) < Math.abs(prev - rawSeconds) ? curr : prev, steps[0])
+        const stepSeconds = Math.max(1, Math.round(secondsPerThumb))
+        
+        // Calculate visible frame range based on scroll position and zoom
+        const startSecond = Math.max(0, Math.floor(scrollPosition / pixelsPerSecond))
+        const endSecond = Math.min(Math.ceil(duration), Math.ceil((scrollPosition + containerWidth) / pixelsPerSecond))
         
         console.log('FramePreviewGenerator: Frame calculation', {
           frameWidth,
-          pixelsPerFrame,
-          startFrame,
-          endFrame,
-          previewInterval,
+          pixelsPerSecond,
+          secondsPerThumb,
+          stepSeconds,
+          startSecond,
+          endSecond,
           containerWidth,
           scrollPosition
         })
         
         const framesToGenerate: number[] = []
-        for (let frame = startFrame; frame <= endFrame; frame += previewInterval) {
-          if (frame >= 0 && frame < duration * frameRate && !generatedFrames.has(frame)) {
-            framesToGenerate.push(frame)
+        for (let sec = Math.floor(startSecond); sec <= endSecond; sec += stepSeconds) {
+          if (sec >= 0 && sec <= duration) {
+            const nearestSecond = Math.max(0, Math.round(sec))
+            const frameForCache = Math.floor(nearestSecond * frameRate)
+            if (frameForCache >= 0 && frameForCache < duration * frameRate && !generatedFramesRef.current.has(frameForCache)) {
+              framesToGenerate.push(frameForCache)
+            }
           }
         }
 
@@ -159,8 +184,9 @@ export default function FramePreviewGenerator({
               // Notify parent component
               onFrameGenerated(frameNumber, dataUrl)
               
-              // Mark as generated
+              // Mark as generated in both state and ref
               setGeneratedFrames(prev => new Set([...prev, frameNumber]))
+              generatedFramesRef.current.add(frameNumber)
               
             } catch (error) {
               console.error(`Failed to generate frame ${frameNumber}:`, error)
@@ -184,7 +210,7 @@ export default function FramePreviewGenerator({
     // Debounce the generation to avoid excessive seeking
     const timeoutId = setTimeout(generateFramePreviews, 1000)
     return () => clearTimeout(timeoutId)
-  }, [videoElement, frameRate, duration, zoom, scrollPosition, containerWidth, generatedFrames, onFrameGenerated, isDragging])
+  }, [videoElement, frameRate, duration, zoom, scrollPosition, containerWidth, onFrameGenerated, isDragging])
 
   return (
     <canvas
@@ -200,17 +226,17 @@ export default function FramePreviewGenerator({
 export function useFramePreviews() {
   const [framePreviews, setFramePreviews] = useState<Map<number, string>>(new Map())
 
-  const addFramePreview = (frameNumber: number, dataUrl: string) => {
+  const addFramePreview = useCallback((frameNumber: number, dataUrl: string) => {
     setFramePreviews(prev => new Map(prev).set(frameNumber, dataUrl))
-  }
+  }, [])
 
-  const getFramePreview = (frameNumber: number): string | null => {
+  const getFramePreview = useCallback((frameNumber: number): string | null => {
     return framePreviews.get(frameNumber) || null
-  }
+  }, [framePreviews])
 
-  const clearFramePreviews = () => {
+  const clearFramePreviews = useCallback(() => {
     setFramePreviews(new Map())
-  }
+  }, [])
 
   return {
     framePreviews,

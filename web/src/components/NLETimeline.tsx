@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { 
   MagnifyingGlassIcon, 
   MagnifyingGlassMinusIcon,
@@ -10,7 +10,7 @@ import {
   BackwardIcon,
   AdjustmentsHorizontalIcon
 } from '@heroicons/react/24/outline'
-import FramePreviewGenerator, { useFramePreviews } from './FramePreviewGenerator'
+import FramePreviewGenerator from './FramePreviewGenerator'
 
 interface Bookmark {
   id: string
@@ -124,7 +124,15 @@ export default function NLETimeline({
     : 1000) // Minimum width with validation
   
   // Frame preview management
-  const { framePreviews, addFramePreview, getFramePreview } = useFramePreviews()
+  const [framePreviews, setFramePreviews] = useState<Map<number, string>>(new Map())
+  
+  const addFramePreview = useCallback((frameNumber: number, dataUrl: string) => {
+    setFramePreviews(prev => new Map(prev).set(frameNumber, dataUrl))
+  }, [])
+
+  const getFramePreview = useCallback((frameNumber: number): string | null => {
+    return framePreviews.get(frameNumber) || null
+  }, [framePreviews])
 
   // Server-provided per-second frames for ribbon
   const getServerPreviewBySecond = useCallback((second: number) => {

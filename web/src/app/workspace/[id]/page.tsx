@@ -104,6 +104,8 @@ export default function WorkspaceDetailPage() {
   const [showAddCollaborator, setShowAddCollaborator] = useState(false)
   const [newCollaborator, setNewCollaborator] = useState("")
   const [addingCollaborator, setAddingCollaborator] = useState(false)
+  const [availableUsers, setAvailableUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
   const [bookmarkSearch, setBookmarkSearch] = useState("")
   const [bookmarkFilter, setBookmarkFilter] = useState<"all" | "mine" | "others" | "locked" | "unlocked">("all")
   const [creatingBookmark, setCreatingBookmark] = useState(false)
@@ -248,6 +250,33 @@ export default function WorkspaceDetailPage() {
 
   const isProducer = workspace?.producer.id === session?.user?.id
 
+  const fetchAvailableUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const response = await fetch("/api/plex/users")
+      const data = await response.json()
+      
+      if (data.success) {
+        // Filter out users who are already collaborators
+        const existingCollaborators = workspace?.memberships
+          .filter(m => m.role === "collaborator")
+          .map(m => m.user.plexUsername) || []
+        
+        const filteredUsers = data.users.filter((user: any) => 
+          !existingCollaborators.includes(user.username)
+        )
+        
+        setAvailableUsers(filteredUsers)
+      } else {
+        setError(data.error || "Failed to fetch available users")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch available users")
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
   const handleAddCollaborator = async () => {
     if (!newCollaborator.trim() || !workspace) return
 
@@ -276,6 +305,7 @@ export default function WorkspaceDetailPage() {
       await fetchWorkspace()
       setNewCollaborator("")
       setShowAddCollaborator(false)
+      setAvailableUsers([])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add collaborator")
     } finally {
@@ -1036,7 +1066,10 @@ export default function WorkspaceDetailPage() {
                   <div className="mt-4">
                     {!showAddCollaborator ? (
                       <button 
-                        onClick={() => setShowAddCollaborator(true)}
+                        onClick={() => {
+                          setShowAddCollaborator(true)
+                          fetchAvailableUsers()
+                        }}
                         className="w-full text-sm text-orange-600 hover:text-orange-700 font-medium flex items-center justify-center"
                       >
                         <PlusIcon className="h-4 w-4 mr-1" />
@@ -1044,32 +1077,64 @@ export default function WorkspaceDetailPage() {
                       </button>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex space-x-2">
-                          <input
-                            type="text"
-                            placeholder="Plex username"
-                            value={newCollaborator}
-                            onChange={(e) => setNewCollaborator(e.target.value)}
-                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
-                            onKeyPress={(e) => e.key === 'Enter' && handleAddCollaborator()}
-                          />
-                          <button
-                            onClick={handleAddCollaborator}
-                            disabled={addingCollaborator || !newCollaborator.trim()}
-                            className="px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {addingCollaborator ? "Adding..." : "Add"}
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setShowAddCollaborator(false)
-                            setNewCollaborator("")
-                          }}
-                          className="w-full text-sm text-gray-500 hover:text-gray-700"
-                        >
-                          Cancel
-                        </button>
+                        {loadingUsers ? (
+                          <div className="flex items-center justify-center py-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
+                            <span className="ml-2 text-sm text-gray-600">Loading available users...</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <select
+                              value={newCollaborator}
+                              onChange={(e) => setNewCollaborator(e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-gray-900"
+                            >
+                              <option value="">Select a user to add as collaborator</option>
+                              {availableUsers.map((user) => (
+                                <option key={user.id} value={user.username}>
+                                  {user.title || user.username} {user.email && `(${user.email})`}
+                                </option>
+                              ))}
+                            </select>
+                            {availableUsers.length === 0 && (
+                              <div className="text-center py-4">
+                                <p className="text-sm text-gray-500 mb-2">
+                                  No additional users available from your Plex server
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  To add collaborators, share your Plex server libraries with friends first at{' '}
+                                  <a 
+                                    href="https://app.plex.tv/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-orange-600 hover:text-orange-700 underline"
+                                  >
+                                    app.plex.tv
+                                  </a>
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={handleAddCollaborator}
+                                disabled={addingCollaborator || !newCollaborator.trim()}
+                                className="flex-1 px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {addingCollaborator ? "Adding..." : "Add Collaborator"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowAddCollaborator(false)
+                                  setNewCollaborator("")
+                                  setAvailableUsers([])
+                                }}
+                                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
