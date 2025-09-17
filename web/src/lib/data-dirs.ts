@@ -1,4 +1,5 @@
 import path from 'path'
+import fs from 'fs-extra'
 
 /**
  * Get the base data directory for the application.
@@ -35,4 +36,21 @@ export function getDbDir(): string {
  */
 export function getLogsDir(): string {
   return path.join(getDataDir(), 'logs')
+}
+
+/**
+ * Ensure all required data directories exist
+ */
+export async function ensureDataDirs(): Promise<void> {
+  const dirs = [
+    getDataDir(),
+    getProcessedFilesDir(),
+    getTempDir(),
+    getDbDir(),
+    getLogsDir()
+  ]
+  
+  for (const dir of dirs) {
+    await fs.ensureDir(dir)
+  }
 }
