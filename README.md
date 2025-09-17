@@ -50,9 +50,12 @@ Use conventional commit messages to control versioning:
 
 For detailed versioning information, see [VERSIONING.md](./VERSIONING.md).
 
+**⚠️ Important**: All commits must follow conventional commit format. Commit messages are automatically validated on pull requests.
+
 ## Documentation
 
 - [VERSIONING.md](./VERSIONING.md) - Automatic versioning system details
+- [COMMIT_LINT.md](./COMMIT_LINT.md) - Commit message format and linting setup
 - [docs/stories.md](./docs/stories.md) - Product requirements and user stories
 
 ## License
