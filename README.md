@@ -61,10 +61,9 @@ docker compose up -d
 
 Then open http://localhost:3000 and follow the welcome wizard to configure your Plex server.
 
-**For production**, copy `docker-compose.production.yml` to `docker-compose.yml` and set `NEXTAUTH_SECRET`:
+**For production**, set a secure `NEXTAUTH_SECRET`:
 
 ```bash
-cp docker-compose.production.yml docker-compose.yml
 echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" > .env
 docker compose up -d
 ```
