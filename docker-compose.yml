@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  clipshare:
+    image: ghcr.io/craigjmidwinter/clipshare:latest
+    container_name: clipshare-web
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent storage for processed video files and clips
+      - ./data/processed-files:/app/processed-files
+      # Temporary files (can be ephemeral, but mapping for debugging)
+      - ./data/temp:/app/temp
+      # Optional: Database file if using SQLite
+      - ./data/db:/app/prisma/db
+      # Optional: Configuration and logs
+      - ./data/logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      # Add your environment variables here
+      # - DATABASE_URL=file:./db/dev.db
+      # - NEXTAUTH_SECRET=your-secret-here
+      # - NEXTAUTH_URL=http://localhost:3000
+      # - PLEX_SERVER_URL=your-plex-server-url
+      # - PLEX_TOKEN=your-plex-token
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Optional: Add a database service if not using external DB
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: clipshare-db
+  #   environment:
+  #     POSTGRES_DB: clipshare
+  #     POSTGRES_USER: clipshare
+  #     POSTGRES_PASSWORD: your-password-here
+  #   volumes:
+  #     - ./data/postgres:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+
+volumes:
+  # Create named volumes if you prefer
+  processed_files:
+  temp_files:
+  db_data:
