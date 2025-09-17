@@ -37,8 +37,13 @@ RUN apk add --no-cache ffmpeg python3 py3-pip shadow
 # Add user and group with configurable UID/GID
 ARG PUID=1000
 ARG PGID=1000
-RUN addgroup -g ${PGID} clipshare && \
-    adduser -u ${PUID} -G clipshare -s /bin/sh -D clipshare
+RUN if getent group ${PGID}; then \
+        GROUP_NAME=$(getent group ${PGID} | cut -d: -f1); \
+        adduser -u ${PUID} -G ${GROUP_NAME} -s /bin/sh -D clipshare; \
+    else \
+        addgroup -g ${PGID} clipshare && \
+        adduser -u ${PUID} -G clipshare -s /bin/sh -D clipshare; \
+    fi
 
 COPY --from=builder /app/public ./public
 
