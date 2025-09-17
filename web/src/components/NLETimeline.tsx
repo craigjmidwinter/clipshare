@@ -8,9 +8,52 @@ import {
   PauseIcon,
   ForwardIcon,
   BackwardIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  EyeIcon
 } from '@heroicons/react/24/outline'
 import FramePreviewGenerator from './FramePreviewGenerator'
+import ClipPreviewModal from './ClipPreviewModal'
+import { useClipStatus } from '@/hooks/useClipStatus'
+
+// Preview button component with loading state
+function PreviewButton({ bookmark, workspaceId, onPreview }: { 
+  bookmark: Bookmark, 
+  workspaceId: string, 
+  onPreview: (bookmark: Bookmark) => void 
+}) {
+  const { clipStatus, isLoading } = useClipStatus(workspaceId, bookmark.id)
+  
+  const isProcessing = clipStatus?.status === 'processing' || clipStatus?.status === 'pending'
+  const isReady = clipStatus?.ready === true
+  
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation()
+        onPreview(bookmark)
+      }}
+      disabled={!isReady && !isProcessing}
+      className={`ml-1 p-0.5 rounded transition-opacity ${
+        !isReady && !isProcessing 
+          ? 'opacity-50 cursor-not-allowed' 
+          : 'opacity-0 group-hover:opacity-100 hover:bg-blue-500'
+      }`}
+      title={
+        isProcessing 
+          ? `Processing... ${clipStatus?.progressPercent || 0}%`
+          : isReady 
+            ? "Preview clip"
+            : "Clip not ready"
+      }
+    >
+      {isProcessing ? (
+        <div className="h-3 w-3 border border-white border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <EyeIcon className="h-3 w-3" />
+      )}
+    </button>
+  )
+}
 
 interface Bookmark {
   id: string
@@ -116,6 +159,8 @@ export default function NLETimeline({
   const [pendingBookmark, setPendingBookmark] = useState<{ startMs: number; endMs: number } | null>(null)
   const [clipName, setClipName] = useState("")
   const [showSnappingSettings, setShowSnappingSettings] = useState(false)
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [selectedBookmarkForPreview, setSelectedBookmarkForPreview] = useState<Bookmark | null>(null)
   
   const timelineRef = useRef<HTMLDivElement>(null)
   const frameWidth = 4 // pixels per frame at zoom level 1
@@ -500,6 +545,16 @@ export default function NLETimeline({
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollPosition(e.currentTarget.scrollLeft)
+  }
+
+  const handlePreviewClip = (bookmark: Bookmark) => {
+    setSelectedBookmarkForPreview(bookmark)
+    setPreviewModalOpen(true)
+  }
+
+  const handleClosePreview = () => {
+    setPreviewModalOpen(false)
+    setSelectedBookmarkForPreview(null)
   }
 
   const generateFrameMarkers = () => {
@@ -887,7 +942,7 @@ export default function NLETimeline({
                 <div key={bookmark.id} className="absolute top-4 bottom-4 z-5">
                   {/* Bookmark Body - Draggable */}
                   <div
-                    className={`absolute top-0 bottom-0 rounded cursor-move ${
+                    className={`absolute top-0 bottom-0 rounded cursor-move group ${
                       bookmark.lockedById ? 'bg-red-600' : 'bg-blue-600'
                     } ${isBeingDragged ? 'opacity-60 border-2 border-yellow-400' : 'opacity-80 hover:opacity-100'} transition-opacity`}
                     style={{
@@ -898,8 +953,16 @@ export default function NLETimeline({
                     onMouseDown={(e) => handleMouseDown(e, 'bookmark-body', bookmark.id)}
                     title={`${bookmark.label || 'Untitled'} - ${formatTimecode(startTime)} → ${formatTimecode(endTime)}`}
                   >
-                    <div className="p-1 text-xs truncate text-white">
-                      {bookmark.label || 'Untitled'}
+                    <div className="flex items-center justify-between p-1 text-xs text-white">
+                      <div className="truncate flex-1">
+                        {bookmark.label || 'Untitled'}
+                      </div>
+                      {/* Preview Button */}
+                      <PreviewButton 
+                        bookmark={bookmark}
+                        workspaceId={workspaceId || ''}
+                        onPreview={handlePreviewClip}
+                      />
                     </div>
                   </div>
 
@@ -981,6 +1044,16 @@ export default function NLETimeline({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clip Preview Modal */}
+      {selectedBookmarkForPreview && (
+        <ClipPreviewModal
+          isOpen={previewModalOpen}
+          onClose={handleClosePreview}
+          bookmark={selectedBookmarkForPreview}
+          workspaceId={workspaceId || ''}
+        />
       )}
     </div>
   )

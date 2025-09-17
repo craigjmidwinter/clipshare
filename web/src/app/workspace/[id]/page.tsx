@@ -29,6 +29,98 @@ import {
 import VideoPlayer from "@/components/VideoPlayer"
 import NLETimeline from "@/components/NLETimeline"
 import OBSExportModal from "@/components/OBSExportModal"
+import ClipPreviewModal from "@/components/ClipPreviewModal"
+import { useClipStatus } from "@/hooks/useClipStatus"
+
+// Download button component with loading state
+function DownloadButton({ 
+  bookmark, 
+  workspaceId, 
+  isDownloading, 
+  onDownload 
+}: { 
+  bookmark: any, 
+  workspaceId: string, 
+  isDownloading: boolean, 
+  onDownload: (bookmarkId: string) => void 
+}) {
+  const { clipStatus } = useClipStatus(workspaceId, bookmark.id)
+  
+  const isProcessing = clipStatus?.status === 'processing' || clipStatus?.status === 'pending'
+  const isReady = clipStatus?.ready === true
+  
+  return (
+    <button 
+      className={`${
+        isProcessing 
+          ? 'text-orange-400' 
+          : isReady 
+            ? 'text-gray-400 hover:text-green-600' 
+            : 'text-gray-300 cursor-not-allowed'
+      }`}
+      title={
+        isProcessing 
+          ? `Processing... ${clipStatus?.progressPercent || 0}%`
+          : isReady 
+            ? "Download bookmark"
+            : "Clip not ready"
+      }
+      onClick={() => onDownload(bookmark.id)}
+      disabled={!isReady || isDownloading}
+    >
+      {isProcessing ? (
+        <div className="h-4 w-4 border border-current border-t-transparent rounded-full animate-spin" />
+      ) : isDownloading ? (
+        <ClockIcon className="h-4 w-4 animate-spin" />
+      ) : (
+        <ArrowDownTrayIcon className="h-4 w-4" />
+      )}
+    </button>
+  )
+}
+
+// Preview button component with loading state
+function PreviewButton({ 
+  bookmark, 
+  workspaceId, 
+  onPreview 
+}: { 
+  bookmark: any, 
+  workspaceId: string, 
+  onPreview: (bookmark: any) => void 
+}) {
+  const { clipStatus } = useClipStatus(workspaceId, bookmark.id)
+  
+  const isProcessing = clipStatus?.status === 'processing' || clipStatus?.status === 'pending'
+  const isReady = clipStatus?.ready === true
+  
+  return (
+    <button 
+      className={`${
+        isProcessing 
+          ? 'text-orange-400' 
+          : isReady 
+            ? 'text-gray-400 hover:text-blue-600' 
+            : 'text-gray-300 cursor-not-allowed'
+      }`}
+      title={
+        isProcessing 
+          ? `Processing... ${clipStatus?.progressPercent || 0}%`
+          : isReady 
+            ? "Preview clip"
+            : "Clip not ready"
+      }
+      onClick={() => onPreview(bookmark)}
+      disabled={!isReady}
+    >
+      {isProcessing ? (
+        <div className="h-4 w-4 border border-current border-t-transparent rounded-full animate-spin" />
+      ) : (
+        <EyeIcon className="h-4 w-4" />
+      )}
+    </button>
+  )
+}
 
 interface Workspace {
   id: string
@@ -133,6 +225,10 @@ export default function WorkspaceDetailPage() {
   // Shot cuts and snapping state
   const [shotCuts, setShotCuts] = useState<any[]>([])
   const [snappingSettings, setSnappingSettings] = useState<any>(null)
+  
+  // Clip preview state
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [selectedBookmarkForPreview, setSelectedBookmarkForPreview] = useState<any>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -544,6 +640,16 @@ export default function WorkspaceDetailPage() {
   const handleCancelInlineEdit = () => {
     setEditingBookmark(null)
     setEditingLabel("")
+  }
+
+  const handlePreviewClip = (bookmark: any) => {
+    setSelectedBookmarkForPreview(bookmark)
+    setPreviewModalOpen(true)
+  }
+
+  const handleClosePreview = () => {
+    setPreviewModalOpen(false)
+    setSelectedBookmarkForPreview(null)
   }
 
   const handleDownloadBookmark = async (bookmarkId: string) => {
@@ -1344,20 +1450,19 @@ export default function WorkspaceDetailPage() {
                                 )}
                               </div>
                               <div className="flex items-center space-x-1">
-                                {workspace.processingStatus === "completed" && (
-                                  <button 
-                                    className="text-gray-400 hover:text-green-600"
-                                    title="Download bookmark"
-                                    onClick={() => handleDownloadBookmark(bookmark.id)}
-                                    disabled={downloadingBookmarks.includes(bookmark.id)}
-                                  >
-                                    {downloadingBookmarks.includes(bookmark.id) ? (
-                                      <ClockIcon className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <ArrowDownTrayIcon className="h-4 w-4" />
-                                    )}
-                                  </button>
-                                )}
+                                {/* Preview Button */}
+                                <PreviewButton 
+                                  bookmark={bookmark}
+                                  workspaceId={workspaceId}
+                                  onPreview={handlePreviewClip}
+                                />
+                                {/* Download Button */}
+                                <DownloadButton 
+                                  bookmark={bookmark}
+                                  workspaceId={workspaceId}
+                                  isDownloading={downloadingBookmarks.includes(bookmark.id)}
+                                  onDownload={handleDownloadBookmark}
+                                />
                                 {canEdit && !bookmark.lockedById && (
                                   <button 
                                     className="text-gray-400 hover:text-blue-600"
@@ -1607,6 +1712,16 @@ export default function WorkspaceDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clip Preview Modal */}
+      {selectedBookmarkForPreview && (
+        <ClipPreviewModal
+          isOpen={previewModalOpen}
+          onClose={handleClosePreview}
+          bookmark={selectedBookmarkForPreview}
+          workspaceId={workspaceId}
+        />
       )}
     </div>
   )

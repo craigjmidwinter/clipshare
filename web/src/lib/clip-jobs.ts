@@ -102,12 +102,28 @@ export async function scheduleClipGeneration(spec: BookmarkSpec, debounceMs = 12
       const endSec = Math.max(startSec + 0.1, spec.endMs / 1000)
       const duration = Math.max(0.1, endSec - startSec)
 
-      // Try copy then transcode
-      try {
-        await runFfmpeg(['-ss', String(startSec), '-i', sourcePath, '-t', String(duration), '-c', 'copy', '-movflags', '+faststart', '-y', outPath])
-      } catch {
-        await runFfmpeg(['-ss', String(startSec), '-i', sourcePath, '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', outPath])
-      }
+      // Use re-encoding for better browser compatibility
+      await runFfmpeg([
+        '-ss', String(Math.max(0, startSec - 0.1)), // Add small padding before
+        '-i', sourcePath,
+        '-ss', '0.1', // Skip the padding
+        '-t', String(duration),
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '28',
+        '-profile:v', 'baseline',
+        '-level', '3.0',
+        '-pix_fmt', 'yuv420p',
+        '-g', '30', // Keyframe interval
+        '-keyint_min', '30',
+        '-c:a', 'aac',
+        '-b:a', '96k',
+        '-ar', '44100', // Standard web audio sample rate
+        '-ac', '2', // Stereo
+        '-avoid_negative_ts', 'make_zero', // Fix negative timestamps
+        '-movflags', '+faststart',
+        '-y', outPath
+      ])
 
       await prisma.processingJob.update({ where: { id: job.id }, data: { status: 'completed', progressPercent: 100 } })
       console.log('[clips] completed job', { bookmarkId: spec.id })
