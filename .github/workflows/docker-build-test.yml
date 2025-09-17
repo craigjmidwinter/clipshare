@@ -28,11 +28,16 @@ jobs:
         with:
           context: ./web
           file: ./web/Dockerfile
-          push: false
+          load: true
           tags: clipshare-web:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Verify Docker image
+        run: |
+          echo "Available Docker images:"
+          docker images | grep clipshare-web || echo "No clipshare-web images found"
+          
       - name: Test Docker image
         run: |
           docker run --rm -d --name clipshare-test -p 3000:3000 clipshare-web:test
@@ -43,7 +48,7 @@ jobs:
             echo "✅ Container started successfully"
           else
             echo "❌ Container failed to start"
-            docker logs clipshare-test
+            docker logs clipshare-test || echo "No container logs available"
             exit 1
           fi
           
@@ -52,7 +57,7 @@ jobs:
             echo "✅ Application is responding"
           else
             echo "❌ Application is not responding"
-            docker logs clipshare-test
+            docker logs clipshare-test || echo "No container logs available"
             exit 1
           fi
           
