@@ -77,7 +77,7 @@ services:
 volumes:
   # Named volumes (alternative to bind mounts)
   # Uncomment if you prefer Docker-managed volumes
-  # processed_files:
-  # temp_files:
-  # db_data:
+  processed_files:
+  temp_files:
+  db_data:
   # postgres_data:
