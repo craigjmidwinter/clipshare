@@ -47,6 +47,30 @@ Clipshare enables teams to collaborate on video content directly from Plex media
 2. **[Architecture Guide](./docs/ARCHITECTURE.md)** - Technical architecture deep dive
 3. **[Troubleshooting Guide](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
 
+## 🐳 Docker Deployment
+
+The easiest way to run Clipshare is with Docker:
+
+```bash
+# Clone and start
+git clone https://github.com/craigjmidwinter/clipshare.git
+cd clipshare
+mkdir -p data
+docker compose up -d
+```
+
+Then open http://localhost:3000 and follow the welcome wizard to configure your Plex server.
+
+**For production**, copy `docker-compose.production.yml` to `docker-compose.yml` and set `NEXTAUTH_SECRET`:
+
+```bash
+cp docker-compose.production.yml docker-compose.yml
+echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" > .env
+docker compose up -d
+```
+
+All data is stored in the `./data` directory for easy backup and migration.
+
 ## 📖 Documentation
 
 ### **Complete Documentation Library**

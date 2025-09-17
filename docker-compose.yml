@@ -7,31 +7,13 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # SINGLE DATA DIRECTORY: All persistent data in one place for easy backup
-      # This single directory contains all your data: clips, database, logs, temp files
+      # Single data directory - all Clipshare data in one place
       - ./data:/app/data
-      
-      # Optional: Configuration files and environment overrides
-      # - ./.env.local:/app/.env.local:ro
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      
-      # Database Configuration (optional - uses defaults if not set)
-      # - DATABASE_URL=file:./data/db/dev.db
-      
-      # Authentication (OPTIONAL - generates random secret if not set)
-      # - NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
-      # - NEXTAUTH_URL=http://localhost:3000
-      
-      # File Processing Paths (optional - uses defaults if not set)
-      # - CLIPS_DIR=/app/data/processed-files/clips
-      # - EXPORT_DIR=/app/data/processed-files/exports
-      # - TEMP_DIR=/app/data/temp
-      
-      # Performance Configuration (optional)
-      # - PROCESS_CONCURRENCY=4
-      # - MAX_CONCURRENT_JOBS=2
+      # Set data directory for application
+      - DATA_DIR=/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -40,12 +22,4 @@ services:
       retries: 3
       start_period: 40s
 
-# Note: Plex configuration (server URL, token) is handled through the
-# welcome wizard on first startup - no environment variables needed!
-
-volumes:
-  # Named volumes (alternative to bind mounts)
-  # Uncomment if you prefer Docker-managed volumes
-  processed_files:
-  temp_files:
-  db_data:
+# Note: Plex configuration is handled through the welcome wizard on first startup

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getProcessedFilesDir, getTempDir } from "@/lib/data-dirs"
 import path from "path"
 import { promises as fs } from "fs"
 import { spawn } from "child_process"
@@ -60,12 +61,12 @@ export async function POST(
     }
 
     // Create temp directory for ZIP
-    const tempDir = path.join(process.cwd(), 'temp', randomUUID())
+    const tempDir = path.join(getTempDir(), randomUUID())
     await fs.mkdir(tempDir, { recursive: true })
 
     try {
       // Copy all clip files to temp directory with clean names
-      const clipsDir = path.join(process.cwd(), 'processed-files', workspaceId, 'clips')
+      const clipsDir = path.join(getProcessedFilesDir(), workspaceId, 'clips')
       const copiedFiles: string[] = []
 
       for (const bookmark of bookmarks) {
