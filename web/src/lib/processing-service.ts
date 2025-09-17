@@ -335,15 +335,6 @@ export class WorkspaceProcessingService {
         reject(new Error(`Failed to start FFmpeg process: ${error.message}`))
       })
 
-      // Handle unexpected termination
-      conversionProcess.on('exit', (code, signal) => {
-        if (!isCompleted) {
-          isCompleted = true
-          clearInterval(progressInterval)
-          console.error(`FFmpeg process exited unexpectedly with code: ${code}, signal: ${signal}`)
-          reject(new Error(`FFmpeg process terminated unexpectedly: code ${code}, signal ${signal}`))
-        }
-      })
 
       // Set a timeout to prevent hanging processes
       const timeout = setTimeout(() => {
