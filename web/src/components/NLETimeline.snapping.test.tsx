@@ -182,3 +182,4 @@ describe('NLETimeline Snapping', () => {
     expect(snappingButton).toBeInTheDocument()
   })
 })
+
