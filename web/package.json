@@ -9,6 +9,8 @@
     "lint": "eslint",
     "lint:commit": "commitlint --edit",
     "lint:commit-last": "commitlint --from HEAD~1 --to HEAD --verbose",
+    "commit": "cz",
+    "commit:fix": "cz --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -58,6 +60,7 @@
     "@chromatic-com/storybook": "^4.1.1",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
+    "@commitlint/cz-commitlint": "^19.8.1",
     "@eslint/eslintrc": "^3",
     "@storybook/addon-a11y": "^9.1.6",
     "@storybook/addon-docs": "^9.1.6",
@@ -70,6 +73,7 @@
     "@types/react-dom": "^19",
     "@vitest/browser": "3.2.4",
     "@vitest/coverage-v8": "3.2.4",
+    "commitizen": "^4.3.1",
     "eslint": "^9",
     "eslint-config-next": "15.5.3",
     "eslint-plugin-storybook": "^9.1.6",
@@ -77,5 +81,10 @@
     "storybook": "^9.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "config": {
+    "commitizen": {
+      "path": "@commitlint/cz-commitlint"
+    }
   }
 }

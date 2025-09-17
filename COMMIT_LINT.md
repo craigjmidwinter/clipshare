@@ -43,11 +43,61 @@ fix: remove deprecated authentication method
 BREAKING CHANGE: The old token-based auth has been removed.
 ```
 
+## Automatic Fixing
+
+### Interactive Commit Creation
+
+Use the interactive commitizen tool to create properly formatted commits:
+
+```bash
+cd web
+npm run commit
+```
+
+This will guide you through creating a conventional commit with prompts for type, scope, description, etc.
+
+### Auto-Fix Existing Messages
+
+Use the auto-fix script to automatically correct common commit message issues:
+
+```bash
+# Auto-fix a commit message
+./scripts/fix-commit.sh -f "Add new feature"
+# Output: feat: add new feature
+
+# Fix uppercase and punctuation issues
+./scripts/fix-commit.sh -f "FIX: Bug in authentication."
+# Output: fix: bug in authentication
+
+# Auto-detect documentation changes
+./scripts/fix-commit.sh -f "Update API documentation"
+# Output: docs: API documentation
+```
+
+### Common Auto-Fixes
+
+The auto-fixer handles these common issues:
+
+- **Missing type**: `Add feature` → `feat: add feature`
+- **Wrong case**: `FEAT: feature` → `feat: feature`
+- **Trailing periods**: `fix: bug.` → `fix: bug`
+- **Missing space**: `feat:feature` → `feat: feature`
+- **Wrong description case**: `feat: Fix Bug` → `feat: fix bug`
+
+### Available Commands
+
+```bash
+./scripts/fix-commit.sh -h              # Show help
+./scripts/fix-commit.sh -i              # Interactive mode
+./scripts/fix-commit.sh -f "message"    # Auto-fix message
+./scripts/fix-commit.sh -v "message"    # Validate message
+```
+
 ## Validation
 
 ### Automated (CI)
 
-All pull requests automatically validate commit messages via GitHub Actions.
+All pull requests automatically validate commit messages via GitHub Actions. If validation fails, the workflow provides helpful suggestions for fixing the messages.
 
 ### Manual Testing
 
@@ -61,6 +111,12 @@ npm run lint:commit-last
 
 # Check commit during editing (for git hooks)
 npm run lint:commit
+
+# Interactive commit creation
+npm run commit
+
+# Auto-fix a message
+../scripts/fix-commit.sh -f "your message"
 
 # Run comprehensive test suite
 ../scripts/test-commitlint.sh

@@ -32,6 +32,46 @@ jobs:
           npx commitlint --from HEAD~1 --to HEAD --verbose
 
       - name: Validate all commits in PR
+        id: validate_commits
+        continue-on-error: true
         run: |
           cd web
           npx commitlint --from ${{ github.event.pull_request.base.sha }} --to HEAD --verbose
+
+      - name: Provide commit message fix suggestions
+        if: steps.validate_commits.outcome == 'failure'
+        run: |
+          echo "## 🔧 Commit Message Auto-Fix Suggestions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Some commits in this PR don't follow conventional commit format. Here are some ways to fix them:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Fixes:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Interactive commit creation** (recommended):" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo 'cd web' >> $GITHUB_STEP_SUMMARY
+          echo 'npm run commit' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Auto-fix existing message:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo './scripts/fix-commit.sh -f "your commit message"' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Common fixes:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`Add new feature\` → \`feat: add new feature\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`FIX: bug\` → \`fix: bug\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`Update docs\` → \`docs: update docs\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`feat: Fix Bug.\` → \`feat: fix bug\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Valid commit types:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`feat:\` - New features" >> $GITHUB_STEP_SUMMARY
+          echo "- \`fix:\` - Bug fixes" >> $GITHUB_STEP_SUMMARY
+          echo "- \`docs:\` - Documentation changes" >> $GITHUB_STEP_SUMMARY
+          echo "- \`style:\` - Code style changes" >> $GITHUB_STEP_SUMMARY
+          echo "- \`refactor:\` - Code refactoring" >> $GITHUB_STEP_SUMMARY
+          echo "- \`test:\` - Test changes" >> $GITHUB_STEP_SUMMARY
+          echo "- \`chore:\` - Maintenance tasks" >> $GITHUB_STEP_SUMMARY
+          echo "- \`feat!:\` - Breaking changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See [COMMIT_LINT.md](./COMMIT_LINT.md) for complete documentation." >> $GITHUB_STEP_SUMMARY
