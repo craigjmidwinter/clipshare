@@ -1,0 +1,133 @@
+name: Automatic Versioning
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+  packages: write
+  actions: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.event.head_commit.message, 'bump:')"
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd web
+        npm ci
+
+    - name: Get current version
+      id: current_version
+      run: |
+        cd web
+        echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+    - name: Determine version bump
+      id: version_bump
+      run: |
+        # Get commit messages since last tag
+        if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          COMMITS=$(git log ${LAST_TAG}..HEAD --oneline)
+          echo "Found existing tag: $LAST_TAG"
+        else
+          # If no tags exist, get commits from the current branch
+          COMMITS=$(git log --oneline HEAD~10..HEAD 2>/dev/null || git log --oneline)
+          echo "No existing tags found, analyzing recent commits"
+        fi
+        
+        echo "Commits to analyze:"
+        echo "$COMMITS"
+        
+        # Skip if no new commits (shouldn't happen due to the trigger, but safety check)
+        if [ -z "$COMMITS" ]; then
+          echo "No new commits found, defaulting to patch"
+          echo "bump=patch" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Determine bump type based on commit messages
+        if echo "$COMMITS" | grep -iE "BREAKING CHANGE|^[a-f0-9]+ [a-z]+!:" > /dev/null; then
+          echo "bump=major" >> $GITHUB_OUTPUT
+          echo "Detected BREAKING CHANGE - major version bump"
+        elif echo "$COMMITS" | grep -iE "^[a-f0-9]+ (feat|feature):" > /dev/null; then
+          echo "bump=minor" >> $GITHUB_OUTPUT
+          echo "Detected feature - minor version bump"
+        elif echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|bugfix):" > /dev/null; then
+          echo "bump=patch" >> $GITHUB_OUTPUT
+          echo "Detected fix - patch version bump"
+        else
+          echo "bump=patch" >> $GITHUB_OUTPUT
+          echo "No specific pattern found - defaulting to patch version bump"
+        fi
+
+    - name: Bump version
+      id: bump
+      run: |
+        cd web
+        OLD_VERSION=$(node -p "require('./package.json').version")
+        
+        case "${{ steps.version_bump.outputs.bump }}" in
+          major)
+            NEW_VERSION=$(npm version major --no-git-tag-version)
+            ;;
+          minor)
+            NEW_VERSION=$(npm version minor --no-git-tag-version)
+            ;;
+          patch)
+            NEW_VERSION=$(npm version patch --no-git-tag-version)
+            ;;
+        esac
+        
+        # Remove 'v' prefix from npm version output
+        NEW_VERSION=${NEW_VERSION#v}
+        
+        echo "old_version=$OLD_VERSION" >> $GITHUB_OUTPUT
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "Bumped version from $OLD_VERSION to $NEW_VERSION"
+
+    - name: Commit version bump
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add web/package.json
+        git commit -m "bump: version ${{ steps.bump.outputs.new_version }}"
+
+    - name: Create and push tag
+      run: |
+        git tag "v${{ steps.bump.outputs.new_version }}"
+        git push origin main
+        git push origin "v${{ steps.bump.outputs.new_version }}"
+
+    - name: Create GitHub Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "v${{ steps.bump.outputs.new_version }}" \
+          --title "Release v${{ steps.bump.outputs.new_version }}" \
+          --notes "## Changes in v${{ steps.bump.outputs.new_version }}
+
+        This release was automatically created by GitHub Actions.
+
+        **Version bump type:** ${{ steps.version_bump.outputs.bump }}
+        **Previous version:** ${{ steps.bump.outputs.old_version }}
+        **New version:** ${{ steps.bump.outputs.new_version }}
+
+        See the commit history for detailed changes."
