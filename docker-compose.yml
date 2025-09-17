@@ -14,9 +14,9 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       # Set data directory for application
       - DATA_DIR=/app/data
-      # User and Group IDs (defaults to 1000:1000)
-      - PUID=1000
-      - PGID=1000
+      # User and Group IDs (defaults to 1001:1001)
+      - PUID=1001
+      - PGID=1001
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]

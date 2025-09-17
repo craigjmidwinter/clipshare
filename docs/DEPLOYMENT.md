@@ -228,8 +228,8 @@ If you need to customize the user/group IDs for your specific system, you can se
 
 ```yaml
 environment:
-  - PUID=1000    # Your user ID
-  - PGID=1000    # Your group ID
+  - PUID=1001    # Your user ID (default: 1001)
+  - PGID=1001    # Your group ID (default: 1001)
 ```
 
 To find your user and group IDs:
