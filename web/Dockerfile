@@ -55,6 +55,9 @@ RUN mkdir -p /app/data/{db,processed-files,temp,logs} && \
 COPY --from=builder --chown=clipshare:clipshare /app/.next/standalone ./
 COPY --from=builder --chown=clipshare:clipshare /app/.next/static ./.next/static
 
+# Copy Prisma schema for database initialization
+COPY --from=builder --chown=clipshare:clipshare /app/prisma ./prisma
+
 USER clipshare
 
 EXPOSE 3000
@@ -63,6 +66,14 @@ ENV PORT=3000
 # set hostname to localhost
 ENV HOSTNAME="0.0.0.0"
 
+# Create startup script to initialize database
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'echo "Initializing database..."' >> /app/start.sh && \
+    echo 'npx prisma db push --accept-data-loss' >> /app/start.sh && \
+    echo 'echo "Starting application..."' >> /app/start.sh && \
+    echo 'exec node server.js' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
 # server.js is created by next build from the standalone output
 # https://nextjs.org/docs/pages/api-reference/next-config-js/output
-CMD ["node", "server.js"]
+CMD ["/app/start.sh"]

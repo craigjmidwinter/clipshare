@@ -60,12 +60,14 @@ docker compose up -d
 
 Then open http://localhost:3000 and follow the welcome wizard to configure your Plex server.
 
-**For production**, set a secure `NEXTAUTH_SECRET`:
+**For production**, optionally set a custom `NEXTAUTH_SECRET` by creating a `.env` file:
 
 ```bash
 echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" > .env
 docker compose up -d
 ```
+
+The default configuration includes a generated secret that works out of the box!
 
 All data is stored in the `./data` directory for easy backup and migration.
 

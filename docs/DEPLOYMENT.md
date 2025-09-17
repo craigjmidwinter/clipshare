@@ -220,7 +220,15 @@ echo "✅ Environment validation passed!"
    - Open http://localhost:3000 in your browser
    - Complete the welcome wizard to configure Plex integration
 
-The Docker image automatically handles data directory creation and permissions - no setup required!
+The Docker image automatically handles data directory creation, permissions, and database initialization - no setup required!
+
+**Optional**: For production deployments, you can set a custom `NEXTAUTH_SECRET`:
+
+```bash
+echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" > .env
+```
+
+The default configuration includes a generated secret that works out of the box.
 
 ### Customizing User Permissions
 

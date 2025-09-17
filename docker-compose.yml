@@ -17,6 +17,8 @@ services:
       # User and Group IDs (defaults to 1001:1001)
       - PUID=1001
       - PGID=1001
+      # NextAuth.js secret (default generated, change for production)
+      - NEXTAUTH_SECRET=clipshare-default-secret-8f7e6d5c4b3a2918071625344352617
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
