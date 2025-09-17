@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     // Pipe the download stream to file
     downloadResponse.data.pipe(writer)
     
-    return new Promise((resolve) => {
+    return new Promise<Response>((resolve) => {
       writer.on('finish', () => {
         console.log(`Test download completed: ${testFilePath}`)
         resolve(NextResponse.json({
