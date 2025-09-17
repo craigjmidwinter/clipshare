@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { prisma } from '@/lib/prisma'
+import { getProcessedFilesDir } from '@/lib/data-dirs'
 
 export interface ShotCutDetectionData {
   workspaceId: string
@@ -59,13 +60,16 @@ export class ShotCutDetectionService {
       }
 
       // Find the processed video file
-      const processedFilesDir = path.join(process.cwd(), 'processed-files', workspaceId)
+      const processedFilesDir = path.join(getProcessedFilesDir(), workspaceId)
       const processedVideoPath = path.join(processedFilesDir, 'processed.mp4')
 
       try {
         await fs.access(processedVideoPath)
-      } catch {
-        throw new Error("Processed video file not found")
+        console.log(`Found processed video file at: ${processedVideoPath}`)
+      } catch (error) {
+        console.error(`Processed video file not found at: ${processedVideoPath}`)
+        console.error(`Directory contents:`, await fs.readdir(processedFilesDir).catch(() => 'Directory does not exist'))
+        throw new Error(`Processed video file not found at ${processedVideoPath}`)
       }
 
       // Clear existing shot cuts

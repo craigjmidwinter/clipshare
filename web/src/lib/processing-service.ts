@@ -409,61 +409,78 @@ export class WorkspaceProcessingService {
 
     console.log(`Generating ${frameTimes.length} frames at shot cuts and regular intervals`)
 
-    // Use FFmpeg to extract frames at specific times
-    return new Promise((resolve, reject) => {
-      const frameProcess = spawn('ffmpeg', [
-        '-i', mp4FilePath,
-        '-vf', `select='${frameTimes.map(t => `eq(t,${t})`).join('+')}',scale=160:-1:flags=lanczos`,
-        '-vsync', 'vfr', // Variable frame rate to match our selection
-        '-q:v', '4', // reasonable thumbnail quality
-        path.join(framesDir, 'shot_frame_%06d.jpg'),
-        '-y'
-      ], {
-        stdio: ['pipe', 'pipe', 'pipe']
-      })
+    // Validate frame count to prevent excessive processing
+    if (frameTimes.length > 100000) {
+      console.warn(`Warning: Very large number of frames (${frameTimes.length}). This may take a long time to process.`)
+      console.warn(`Consider reducing shot cut density or increasing regular interval spacing.`)
+    }
 
-      let progress = 0
-      const progressInterval = setInterval(async () => {
-        progress += 4 // Spread 20% progress over ~5 seconds
-        if (progress <= 20) {
-          await this.updateJobProgress(jobId, 80 + progress)
-          await this.updateWorkspaceProgress(workspaceId, 80 + progress)
-        }
-      }, 500)
+    // Batch frame generation to avoid E2BIG error (command line too long)
+    const BATCH_SIZE = 1000 // Process frames in batches of 1000 to avoid command line limits
+    let frameIndex = 0
+    
+    for (let i = 0; i < frameTimes.length; i += BATCH_SIZE) {
+      const batch = frameTimes.slice(i, i + BATCH_SIZE)
+      const batchStartIndex = frameIndex
+      
+      console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(frameTimes.length / BATCH_SIZE)} (${batch.length} frames)`)
+      
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const frameProcess = spawn('ffmpeg', [
+            '-i', mp4FilePath,
+            '-vf', `select='${batch.map(t => `eq(t,${t})`).join('+')}',scale=160:-1:flags=lanczos`,
+            '-vsync', 'vfr', // Variable frame rate to match our selection
+            '-q:v', '4', // reasonable thumbnail quality
+            path.join(framesDir, `shot_frame_%06d.jpg`),
+            '-y'
+          ], {
+            stdio: ['pipe', 'pipe', 'pipe']
+          })
 
-      // Handle FFmpeg output for better error reporting
-      let stderr = ''
-      frameProcess.stderr?.on('data', (data) => {
-        stderr += data.toString()
-        console.log(`FFmpeg shot frames: ${data.toString().trim()}`)
-      })
+          // Handle FFmpeg output for better error reporting
+          let stderr = ''
+          frameProcess.stderr?.on('data', (data) => {
+            stderr += data.toString()
+            console.log(`FFmpeg batch ${Math.floor(i / BATCH_SIZE) + 1}: ${data.toString().trim()}`)
+          })
 
-      frameProcess.on('close', async (code) => {
-        clearInterval(progressInterval)
-        if (code === 0) {
-          console.log(`Shot-aware preview frames generated in ${framesDir}`)
-          
-          // Store frame metadata for shot-aware lookup
-          await this.storeFrameMetadata(workspaceId, frameTimes, shotCuts)
-          
-          resolve()
-        } else {
-          console.error(`FFmpeg shot frames stderr: ${stderr}`)
-          reject(new Error(`Shot frame generation process exited with code ${code}: ${stderr}`))
-        }
-      })
+          frameProcess.on('close', async (code) => {
+            if (code === 0) {
+              console.log(`Batch ${Math.floor(i / BATCH_SIZE) + 1} completed successfully`)
+              frameIndex += batch.length
+              resolve()
+            } else {
+              console.error(`FFmpeg batch ${Math.floor(i / BATCH_SIZE) + 1} stderr: ${stderr}`)
+              reject(new Error(`Shot frame generation batch ${Math.floor(i / BATCH_SIZE) + 1} exited with code ${code}: ${stderr}`))
+            }
+          })
 
-      frameProcess.on('error', (error) => {
-        clearInterval(progressInterval)
-        console.error('Shot frame generation error:', error)
-        reject(error)
-      })
-    })
+          frameProcess.on('error', (error) => {
+            console.error(`Shot frame generation batch ${Math.floor(i / BATCH_SIZE) + 1} error:`, error)
+            reject(error)
+          })
+        })
+      } catch (error) {
+        console.error(`Failed to process batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error)
+        throw new Error(`Frame generation failed at batch ${Math.floor(i / BATCH_SIZE) + 1}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      
+      // Update progress
+      const progress = Math.min(20, Math.floor((i + BATCH_SIZE) / frameTimes.length * 20))
+      await this.updateJobProgress(jobId, 80 + progress)
+      await this.updateWorkspaceProgress(workspaceId, 80 + progress)
+    }
+
+    console.log(`Shot-aware preview frames generated in ${framesDir}`)
+    
+    // Store frame metadata for shot-aware lookup
+    await this.storeFrameMetadata(workspaceId, frameTimes, shotCuts)
   }
 
   private async storeFrameMetadata(workspaceId: string, frameTimes: number[], shotCuts: any[]): Promise<void> {
     // Store frame metadata in a JSON file for shot-aware lookup
-    const outputDir = path.join(process.cwd(), 'processed-files', workspaceId)
+    const outputDir = path.join(getProcessedFilesDir(), workspaceId)
     const metadataFile = path.join(outputDir, 'frame_metadata.json')
     
     const metadata = {
