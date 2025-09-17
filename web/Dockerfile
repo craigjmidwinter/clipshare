@@ -32,7 +32,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Install system dependencies needed by the app
-RUN apk add --no-cache ffmpeg python3 py3-pip shadow
+RUN apk add --no-cache ffmpeg python3 py3-pip shadow curl
 
 # Install Prisma CLI for database initialization
 RUN npm install -g prisma@latest
@@ -68,6 +68,8 @@ COPY --from=builder --chown=clipshare:clipshare /app/scripts ./scripts
 
 # Create startup script to initialize database (before switching user)
 RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'set -e' >> /app/start.sh && \
+    echo 'echo "Initializing database..."' >> /app/start.sh && \
     echo 'node /app/scripts/init-db.js' >> /app/start.sh && \
     echo 'echo "Starting application..."' >> /app/start.sh && \
     echo 'exec node server.js' >> /app/start.sh && \

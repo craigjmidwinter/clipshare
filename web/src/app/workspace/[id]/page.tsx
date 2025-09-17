@@ -114,6 +114,14 @@ export default function WorkspaceDetailPage() {
   const [showReprocessDialog, setShowReprocessDialog] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   const [showOBSExportModal, setShowOBSExportModal] = useState(false)
+  const [showEditWorkspaceModal, setShowEditWorkspaceModal] = useState(false)
+  const [showDeleteWorkspaceModal, setShowDeleteWorkspaceModal] = useState(false)
+  const [editingWorkspace, setEditingWorkspace] = useState(false)
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false)
+  const [workspaceEditData, setWorkspaceEditData] = useState({
+    title: "",
+    description: ""
+  })
   
   // Video player state for timeline integration
   const [currentTime, setCurrentTime] = useState(0)
@@ -598,6 +606,83 @@ export default function WorkspaceDetailPage() {
     }
   }
 
+  // Workspace management functions
+  const handleEditWorkspace = async () => {
+    if (!workspace) return
+
+    try {
+      setEditingWorkspace(true)
+      setError("")
+
+      const response = await fetch("/api/workspaces", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: workspace.id,
+          title: workspaceEditData.title,
+          description: workspaceEditData.description
+        })
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to update workspace")
+      }
+
+      // Update workspace state
+      setWorkspace({
+        ...workspace,
+        title: workspaceEditData.title,
+        description: workspaceEditData.description
+      })
+
+      setShowEditWorkspaceModal(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update workspace")
+    } finally {
+      setEditingWorkspace(false)
+    }
+  }
+
+  const handleDeleteWorkspace = async () => {
+    if (!workspace) return
+
+    try {
+      setDeletingWorkspace(true)
+      setError("")
+
+      const response = await fetch(`/api/workspaces?id=${workspace.id}`, {
+        method: "DELETE"
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to delete workspace")
+      }
+
+      // Redirect to workspaces page
+      router.push("/workspaces")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete workspace")
+    } finally {
+      setDeletingWorkspace(false)
+    }
+  }
+
+  const openEditWorkspaceModal = () => {
+    if (workspace) {
+      setWorkspaceEditData({
+        title: workspace.title,
+        description: workspace.description || ""
+      })
+      setShowEditWorkspaceModal(true)
+    }
+  }
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -663,7 +748,28 @@ export default function WorkspaceDetailPage() {
                 Back
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{workspace.title}</h1>
+                <div className="flex items-center space-x-3">
+                  <h1 className="text-2xl font-bold text-gray-900">{workspace.title}</h1>
+                  {/* Only show edit/delete buttons if user is the producer */}
+                  {workspace.producer.id === session?.user?.id && (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={openEditWorkspaceModal}
+                        className="p-1 text-gray-400 hover:text-gray-600"
+                        title="Edit workspace"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteWorkspaceModal(true)}
+                        className="p-1 text-gray-400 hover:text-red-600"
+                        title="Delete workspace"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <p className="text-sm text-gray-600">{workspace.contentTitle}</p>
               </div>
             </div>
@@ -1268,6 +1374,116 @@ export default function WorkspaceDetailPage() {
         workspaceTitle={workspace?.title || ''}
         bookmarkCount={workspace?.bookmarks.length || 0}
       />
+
+      {/* Edit Workspace Modal */}
+      {showEditWorkspaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Edit Workspace</h2>
+              <button
+                onClick={() => setShowEditWorkspaceModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="workspace-title" className="block text-sm font-medium text-gray-700 mb-1">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  id="workspace-title"
+                  value={workspaceEditData.title}
+                  onChange={(e) => setWorkspaceEditData({ ...workspaceEditData, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="Enter workspace title"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="workspace-description" className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  id="workspace-description"
+                  value={workspaceEditData.description}
+                  onChange={(e) => setWorkspaceEditData({ ...workspaceEditData, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="Enter workspace description"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  onClick={() => setShowEditWorkspaceModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  disabled={editingWorkspace}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditWorkspace}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                  disabled={editingWorkspace || !workspaceEditData.title.trim()}
+                >
+                  {editingWorkspace ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Workspace Modal */}
+      {showDeleteWorkspaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Delete Workspace</h2>
+              <button
+                onClick={() => setShowDeleteWorkspaceModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-start space-x-3">
+                <ExclamationTriangleIcon className="h-6 w-6 text-red-500 mt-0.5" />
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Are you sure?</h3>
+                  <p className="text-sm text-gray-600 mb-4">
+                    This will permanently delete the workspace "{workspace?.title}" and all its bookmarks. 
+                    This action cannot be undone.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={() => setShowDeleteWorkspaceModal(false)}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                      disabled={deletingWorkspace}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteWorkspace}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                      disabled={deletingWorkspace}
+                    >
+                      {deletingWorkspace ? "Deleting..." : "Delete Workspace"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

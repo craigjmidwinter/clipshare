@@ -10,9 +10,52 @@ const debounceTimers = new Map<string, NodeJS.Timeout>()
 
 async function runFfmpeg(args: string[]) {
   return new Promise<void>((resolve, reject) => {
-    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))))
-    p.on('error', reject)
+    const p = spawn('ffmpeg', args, { 
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Prevent process from being killed by Docker
+      detached: false,
+      shell: false
+    })
+    
+    let stderr = ''
+    let stdout = ''
+    
+    p.stderr?.on('data', (data) => {
+      stderr += data.toString()
+      console.log(`FFmpeg clip stderr: ${data.toString().trim()}`)
+    })
+    
+    p.stdout?.on('data', (data) => {
+      stdout += data.toString()
+      console.log(`FFmpeg clip stdout: ${data.toString().trim()}`)
+    })
+    
+    p.on('close', (code, signal) => {
+      console.log(`FFmpeg clip process closed with code: ${code}, signal: ${signal}`)
+      if (code === 0) {
+        resolve()
+      } else {
+        const errorMsg = `ffmpeg exited ${code}${signal ? ` with signal ${signal}` : ''}`
+        console.error(`${errorMsg}. Stderr: ${stderr}`)
+        reject(new Error(`${errorMsg}: ${stderr}`))
+      }
+    })
+    
+    p.on('error', (error) => {
+      console.error('FFmpeg clip spawn error:', error)
+      reject(new Error(`Failed to start FFmpeg process: ${error.message}`))
+    })
+    
+    // Set timeout to prevent hanging
+    const timeout = setTimeout(() => {
+      console.error('FFmpeg clip generation timed out after 10 minutes')
+      p.kill('SIGTERM')
+      reject(new Error('FFmpeg clip generation timed out after 10 minutes'))
+    }, 10 * 60 * 1000) // 10 minutes timeout
+    
+    p.on('close', () => {
+      clearTimeout(timeout)
+    })
   })
 }
 

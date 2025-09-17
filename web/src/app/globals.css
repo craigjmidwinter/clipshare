@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Fix input styling in modals */
+input, textarea, select {
+  color: #1f2937 !important; /* Force dark text */
+  background-color: #ffffff !important; /* Force white background */
+}
+
+input::placeholder, textarea::placeholder {
+  color: #6b7280 !important; /* Force gray placeholder text */
+}

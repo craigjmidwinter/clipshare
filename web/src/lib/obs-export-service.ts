@@ -179,9 +179,52 @@ export class OBSExportService {
     const clipsDir = path.join(packageDir, 'clips')
 
     const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-      p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)))
-      p.on('error', reject)
+      const p = spawn('ffmpeg', args, { 
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // Prevent process from being killed by Docker
+        detached: false,
+        shell: false
+      })
+      
+      let stderr = ''
+      let stdout = ''
+      
+      p.stderr?.on('data', (data) => {
+        stderr += data.toString()
+        console.log(`FFmpeg OBS export stderr: ${data.toString().trim()}`)
+      })
+      
+      p.stdout?.on('data', (data) => {
+        stdout += data.toString()
+        console.log(`FFmpeg OBS export stdout: ${data.toString().trim()}`)
+      })
+      
+      p.on('close', (code, signal) => {
+        console.log(`FFmpeg OBS export process closed with code: ${code}, signal: ${signal}`)
+        if (code === 0) {
+          resolve()
+        } else {
+          const errorMsg = `ffmpeg exited ${code}${signal ? ` with signal ${signal}` : ''}`
+          console.error(`${errorMsg}. Stderr: ${stderr}`)
+          reject(new Error(`${errorMsg}: ${stderr}`))
+        }
+      })
+      
+      p.on('error', (error) => {
+        console.error('FFmpeg OBS export spawn error:', error)
+        reject(new Error(`Failed to start FFmpeg process: ${error.message}`))
+      })
+      
+      // Set timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        console.error('FFmpeg OBS export timed out after 15 minutes')
+        p.kill('SIGTERM')
+        reject(new Error('FFmpeg OBS export timed out after 15 minutes'))
+      }, 15 * 60 * 1000) // 15 minutes timeout
+      
+      p.on('close', () => {
+        clearTimeout(timeout)
+      })
     })
 
     for (const bookmark of workspace.bookmarks) {
@@ -216,9 +259,52 @@ export class OBSExportService {
     const thumbnailsDir = path.join(packageDir, 'web-interface', 'thumbnails')
 
     const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] })
-      p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)))
-      p.on('error', reject)
+      const p = spawn('ffmpeg', args, { 
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // Prevent process from being killed by Docker
+        detached: false,
+        shell: false
+      })
+      
+      let stderr = ''
+      let stdout = ''
+      
+      p.stderr?.on('data', (data) => {
+        stderr += data.toString()
+        console.log(`FFmpeg thumbnail stderr: ${data.toString().trim()}`)
+      })
+      
+      p.stdout?.on('data', (data) => {
+        stdout += data.toString()
+        console.log(`FFmpeg thumbnail stdout: ${data.toString().trim()}`)
+      })
+      
+      p.on('close', (code, signal) => {
+        console.log(`FFmpeg thumbnail process closed with code: ${code}, signal: ${signal}`)
+        if (code === 0) {
+          resolve()
+        } else {
+          const errorMsg = `ffmpeg exited ${code}${signal ? ` with signal ${signal}` : ''}`
+          console.error(`${errorMsg}. Stderr: ${stderr}`)
+          reject(new Error(`${errorMsg}: ${stderr}`))
+        }
+      })
+      
+      p.on('error', (error) => {
+        console.error('FFmpeg thumbnail spawn error:', error)
+        reject(new Error(`Failed to start FFmpeg process: ${error.message}`))
+      })
+      
+      // Set timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        console.error('FFmpeg thumbnail generation timed out after 5 minutes')
+        p.kill('SIGTERM')
+        reject(new Error('FFmpeg thumbnail generation timed out after 5 minutes'))
+      }, 5 * 60 * 1000) // 5 minutes timeout
+      
+      p.on('close', () => {
+        clearTimeout(timeout)
+      })
     })
 
     for (const bookmark of workspace.bookmarks) {

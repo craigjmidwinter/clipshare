@@ -276,11 +276,20 @@ export class WorkspaceProcessingService {
         '-y', // Overwrite output file
         mp4FilePath
       ], {
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
+        // Prevent process from being killed by Docker
+        detached: false,
+        // Set process group to handle signals properly
+        shell: false
       })
 
       let progress = 0
+      let isCompleted = false
       const progressInterval = setInterval(async () => {
+        if (isCompleted) {
+          clearInterval(progressInterval)
+          return
+        }
         progress += 7 // Spread 70% progress over ~10 seconds
         if (progress <= 70) {
           await this.updateJobProgress(jobId, 10 + progress)
@@ -290,26 +299,66 @@ export class WorkspaceProcessingService {
 
       // Handle FFmpeg output for better error reporting
       let stderr = ''
+      let stdout = ''
+      
       conversionProcess.stderr?.on('data', (data) => {
         stderr += data.toString()
-        console.log(`FFmpeg: ${data.toString().trim()}`)
+        console.log(`FFmpeg stderr: ${data.toString().trim()}`)
       })
 
-      conversionProcess.on('close', async (code) => {
+      conversionProcess.stdout?.on('data', (data) => {
+        stdout += data.toString()
+        console.log(`FFmpeg stdout: ${data.toString().trim()}`)
+      })
+
+      // Handle process termination gracefully
+      conversionProcess.on('close', async (code, signal) => {
+        isCompleted = true
         clearInterval(progressInterval)
+        
+        console.log(`FFmpeg process closed with code: ${code}, signal: ${signal}`)
+        
         if (code === 0) {
           console.log(`Conversion completed: ${mp4FilePath}`)
           resolve(mp4FilePath)
         } else {
-          console.error(`FFmpeg stderr: ${stderr}`)
-          reject(new Error(`FFmpeg process exited with code ${code}: ${stderr}`))
+          const errorMsg = `FFmpeg process exited with code ${code}${signal ? ` and signal ${signal}` : ''}`
+          console.error(`${errorMsg}. Stderr: ${stderr}`)
+          reject(new Error(`${errorMsg}: ${stderr}`))
         }
       })
 
       conversionProcess.on('error', (error) => {
+        isCompleted = true
         clearInterval(progressInterval)
-        console.error('FFmpeg error:', error)
-        reject(error)
+        console.error('FFmpeg spawn error:', error)
+        reject(new Error(`Failed to start FFmpeg process: ${error.message}`))
+      })
+
+      // Handle unexpected termination
+      conversionProcess.on('exit', (code, signal) => {
+        if (!isCompleted) {
+          isCompleted = true
+          clearInterval(progressInterval)
+          console.error(`FFmpeg process exited unexpectedly with code: ${code}, signal: ${signal}`)
+          reject(new Error(`FFmpeg process terminated unexpectedly: code ${code}, signal ${signal}`))
+        }
+      })
+
+      // Set a timeout to prevent hanging processes
+      const timeout = setTimeout(() => {
+        if (!isCompleted) {
+          isCompleted = true
+          clearInterval(progressInterval)
+          console.error('FFmpeg conversion timed out after 30 minutes')
+          conversionProcess.kill('SIGTERM')
+          reject(new Error('FFmpeg conversion timed out after 30 minutes'))
+        }
+      }, 30 * 60 * 1000) // 30 minutes timeout
+
+      // Clear timeout when process completes
+      conversionProcess.on('close', () => {
+        clearTimeout(timeout)
       })
     })
   }
