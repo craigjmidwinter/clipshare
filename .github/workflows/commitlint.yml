@@ -1,0 +1,37 @@
+name: Validate Commit Messages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  commitlint:
+    runs-on: ubuntu-latest
+    name: Lint commit messages
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'web/package-lock.json'
+
+      - name: Install dependencies
+        run: |
+          cd web
+          npm ci
+
+      - name: Validate current commit (last commit)
+        run: |
+          cd web
+          npx commitlint --from HEAD~1 --to HEAD --verbose
+
+      - name: Validate all commits in PR
+        run: |
+          cd web
+          npx commitlint --from ${{ github.event.pull_request.base.sha }} --to HEAD --verbose

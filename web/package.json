@@ -7,6 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
+    "lint:commit": "commitlint --edit",
+    "lint:commit-last": "commitlint --from HEAD~1 --to HEAD --verbose",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -54,6 +56,8 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.1",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@eslint/eslintrc": "^3",
     "@storybook/addon-a11y": "^9.1.6",
     "@storybook/addon-docs": "^9.1.6",
