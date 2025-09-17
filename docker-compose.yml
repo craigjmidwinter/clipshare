@@ -7,23 +7,45 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persistent storage for processed video files and clips
+      # CRITICAL: Persistent storage for processed video files and clips
+      # This directory contains all your generated video clips and workspace data
       - ./data/processed-files:/app/processed-files
-      # Temporary files (can be ephemeral, but mapping for debugging)
+      
+      # Temporary files for video processing (can be ephemeral)
       - ./data/temp:/app/temp
-      # Optional: Database file if using SQLite
+      
+      # Database storage (SQLite) - IMPORTANT for data persistence
       - ./data/db:/app/prisma/db
-      # Optional: Configuration and logs
+      
+      # Application logs for debugging and monitoring
       - ./data/logs:/app/logs
+      
+      # Optional: Configuration files and environment overrides
+      # - ./.env.local:/app/.env.local:ro
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
-      # Add your environment variables here
+      
+      # Database Configuration (uncomment and configure)
       # - DATABASE_URL=file:./db/dev.db
-      # - NEXTAUTH_SECRET=your-secret-here
+      
+      # Authentication (REQUIRED - generate strong secret)
+      # - NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
       # - NEXTAUTH_URL=http://localhost:3000
-      # - PLEX_SERVER_URL=your-plex-server-url
-      # - PLEX_TOKEN=your-plex-token
+      
+      # Plex Integration (REQUIRED for functionality)
+      # - PLEX_CLIENT_ID=your-unique-client-id
+      # - PLEX_SERVER_URL=http://your-plex-server:32400
+      # - PLEX_SERVER_TOKEN=your-plex-server-token
+      
+      # File Processing Paths
+      # - CLIPS_DIR=/app/processed-files/clips
+      # - EXPORT_DIR=/app/processed-files/exports
+      # - TEMP_DIR=/app/temp
+      
+      # Performance Configuration
+      # - PROCESS_CONCURRENCY=4
+      # - MAX_CONCURRENT_JOBS=2
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -32,22 +54,30 @@ services:
       retries: 3
       start_period: 40s
 
-# Optional: Add a database service if not using external DB
-  # db:
+# Optional: Add a PostgreSQL database service for larger deployments
+# Uncomment the following section if you prefer PostgreSQL over SQLite
+  # postgres:
   #   image: postgres:15-alpine
   #   container_name: clipshare-db
   #   environment:
   #     POSTGRES_DB: clipshare
   #     POSTGRES_USER: clipshare
-  #     POSTGRES_PASSWORD: your-password-here
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
   #   volumes:
-  #     - ./data/postgres:/var/lib/postgresql/data
+  #     - postgres_data:/var/lib/postgresql/data
   #   ports:
   #     - "5432:5432"
   #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U clipshare"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
 volumes:
-  # Create named volumes if you prefer
-  processed_files:
-  temp_files:
-  db_data:
+  # Named volumes (alternative to bind mounts)
+  # Uncomment if you prefer Docker-managed volumes
+  # processed_files:
+  # temp_files:
+  # db_data:
+  # postgres_data:

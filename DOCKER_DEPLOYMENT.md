@@ -14,15 +14,118 @@ cd clipshare
 # Create data directories for persistence
 mkdir -p data/{processed-files,temp,db,logs}
 
+# Set proper permissions for the data directories
+sudo chown -R 1001:1001 data/
+
 # Copy and edit the environment variables
 cp web/env.example .env
 # Edit .env with your configuration
 
 # Start the application
 docker-compose up -d
+
+# Check the logs
+docker-compose logs -f clipshare
+```
+
+### For Production Deployment
+
+Use the production-optimized compose file:
+
+```bash
+# Use production compose file with PostgreSQL, Nginx, and Redis
+cp docker-compose.production.yml docker-compose.yml
+
+# Create environment file with production settings
+cat > .env << EOF
+NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
+NEXTAUTH_URL=https://clipshare.yourdomain.com
+PLEX_CLIENT_ID=your-plex-client-id
+PLEX_SERVER_URL=http://your-plex-server:32400
+PLEX_SERVER_TOKEN=your-plex-server-token
+POSTGRES_PASSWORD=secure-database-password
+EOF
+
+# Create required directories
+sudo mkdir -p /var/lib/clipshare/{data,db,temp} /var/log/clipshare
+
+# Start production stack
+docker-compose up -d
 ```
 
 ## Volume Mappings for Persistence
+
+Clipshare requires several directories to be mapped for proper data persistence:
+
+### Critical Volumes (Data Loss Risk if Not Mapped)
+
+| Host Path | Container Path | Purpose | Size Estimate |
+|-----------|----------------|---------|---------------|
+| `./data/processed-files` | `/app/processed-files` | **CRITICAL** - All video clips, workspace files | Large (GB+) |
+| `./data/db` | `/app/prisma/db` | **CRITICAL** - SQLite database | Small (MB) |
+
+### Important Volumes (Recommended for Production)
+
+| Host Path | Container Path | Purpose | Size Estimate |
+|-----------|----------------|---------|---------------|
+| `./data/temp` | `/app/temp` | Temporary processing files | Variable |
+| `./data/logs` | `/app/logs` | Application logs | Small (MB) |
+
+### Volume Configuration Examples
+
+**Bind Mounts (Development):**
+```yaml
+volumes:
+  - ./data/processed-files:/app/processed-files
+  - ./data/db:/app/prisma/db
+  - ./data/temp:/app/temp
+  - ./data/logs:/app/logs
+```
+
+**Named Volumes (Production):**
+```yaml
+volumes:
+  - clipshare_data:/app/processed-files
+  - clipshare_db:/app/prisma/db
+  - clipshare_temp:/app/temp
+  - clipshare_logs:/app/logs
+```
+
+### Directory Structure
+
+After running, your data directory should look like:
+```
+data/
+├── processed-files/
+│   ├── clips/           # Generated video clips
+│   ├── exports/         # OBS packages and exports
+│   └── workspaces/      # Workspace-specific files
+├── db/
+│   └── dev.db          # SQLite database file
+├── temp/               # Temporary processing files
+└── logs/               # Application logs
+```
+
+### Backup Recommendations
+
+**Critical Data to Backup:**
+1. `./data/processed-files` - Contains all user-generated clips
+2. `./data/db` - Database with workspaces and bookmarks
+
+**Backup Script Example:**
+```bash
+#!/bin/bash
+BACKUP_DIR="/backup/clipshare/$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$BACKUP_DIR"
+
+# Backup database
+cp -r ./data/db "$BACKUP_DIR/"
+
+# Backup processed files (this can be large)
+tar -czf "$BACKUP_DIR/processed-files.tar.gz" ./data/processed-files/
+
+echo "Backup completed: $BACKUP_DIR"
+```
 
 The application requires several directories to be persistent:
 
@@ -115,9 +218,22 @@ docker run -d \
 ## Available Image Tags
 
 After successful builds, images are available at:
+
+### Version Tags (Recommended for Production)
+- `ghcr.io/craigjmidwinter/clipshare:v0.3.2` - Specific version (semantic versioning)
+- `ghcr.io/craigjmidwinter/clipshare:0.3.2` - Version without 'v' prefix
+- `ghcr.io/craigjmidwinter/clipshare:0.3` - Minor version (automatically updated)
+- `ghcr.io/craigjmidwinter/clipshare:0` - Major version (automatically updated)
+
+### Development Tags
 - `ghcr.io/craigjmidwinter/clipshare:latest` - Latest main branch build
 - `ghcr.io/craigjmidwinter/clipshare:main` - Main branch builds
 - `ghcr.io/craigjmidwinter/clipshare:sha-<commit>` - Specific commit builds
+
+### Tag Recommendations
+- **Production**: Use specific version tags (e.g., `v0.3.2`) for stability
+- **Staging**: Use minor version tags (e.g., `0.3`) for automatic updates within the same minor version
+- **Development**: Use `latest` for bleeding-edge features
 
 ## Development
 
