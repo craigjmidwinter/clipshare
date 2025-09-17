@@ -737,7 +737,7 @@ export default function NLETimeline({
             >
               <AdjustmentsHorizontalIcon className="h-4 w-4" />
               <span className="text-xs font-medium">
-                {snappingSettings?.snappingEnabled ? 'SNAP' : 'SNAP'}
+                {snappingSettings?.snappingEnabled ? 'SNAP ON' : 'SNAP OFF'}
               </span>
             </button>
           {showSnappingSettings && snappingSettings && (
