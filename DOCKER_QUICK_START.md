@@ -28,7 +28,7 @@ cp .env.docker .env
 # Edit .env with production values
 
 # Create required directories
-sudo mkdir -p /var/lib/clipshare/{data,db,temp} /var/log/clipshare
+sudo mkdir -p /var/lib/clipshare/data/{processed-files,db,temp,logs}
 
 # Start production stack
 docker compose up -d
@@ -46,13 +46,14 @@ docker compose up -d
 
 ## Volume Mappings
 
-### Critical Volumes (Must be persistent)
-- `/app/processed-files` - All video clips and workspace data
-- `/app/prisma/db` - Database files (SQLite)
+### Single Data Directory (Simplified!)
+- `/app/data` - **ALL CLIPSHARE DATA** in one directory!
 
-### Optional Volumes
-- `/app/temp` - Temporary processing files
-- `/app/logs` - Application logs
+### What's Inside the Data Directory
+- `data/processed-files/` - All video clips and workspace data
+- `data/db/` - SQLite database files  
+- `data/temp/` - Temporary processing files
+- `data/logs/` - Application logs
 
 ## Configuration Files
 

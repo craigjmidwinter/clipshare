@@ -47,7 +47,7 @@ POSTGRES_PASSWORD=secure-database-password
 EOF
 
 # Create required directories
-sudo mkdir -p /var/lib/clipshare/{data,db,temp} /var/log/clipshare
+sudo mkdir -p /var/lib/clipshare/data/{processed-files,db,temp,logs}
 
 # Start production stack
 docker-compose up -d
@@ -55,45 +55,44 @@ docker-compose up -d
 
 ## Volume Mappings for Persistence
 
-Clipshare requires several directories to be mapped for proper data persistence:
+Clipshare uses a **single data directory** approach for easy management and backup. All persistent data is stored within one directory that you mount to the container:
 
-### Critical Volumes (Data Loss Risk if Not Mapped)
-
-| Host Path | Container Path | Purpose | Size Estimate |
-|-----------|----------------|---------|---------------|
-| `./data/processed-files` | `/app/processed-files` | **CRITICAL** - All video clips, workspace files | Large (GB+) |
-| `./data/db` | `/app/prisma/db` | **CRITICAL** - SQLite database | Small (MB) |
-
-### Important Volumes (Recommended for Production)
+### Single Data Directory Mount
 
 | Host Path | Container Path | Purpose | Size Estimate |
 |-----------|----------------|---------|---------------|
-| `./data/temp` | `/app/temp` | Temporary processing files | Variable |
-| `./data/logs` | `/app/logs` | Application logs | Small (MB) |
+| `./data` | `/app/data` | **ALL DATA** - Complete Clipshare data directory | Large (GB+) |
+
+### Internal Directory Structure
+
+Within the single data directory, Clipshare organizes data into subdirectories:
+
+| Subdirectory | Purpose | Criticality |
+|--------------|---------|-------------|
+| `data/processed-files/` | **CRITICAL** - All video clips and workspace files | High |
+| `data/db/` | **CRITICAL** - SQLite database | High |
+| `data/temp/` | Temporary processing files | Low |
+| `data/logs/` | Application logs | Low |
 
 ### Volume Configuration Examples
 
 **Bind Mounts (Development):**
 ```yaml
 volumes:
-  - ./data/processed-files:/app/processed-files
-  - ./data/db:/app/prisma/db
-  - ./data/temp:/app/temp
-  - ./data/logs:/app/logs
+  # Single directory mount - everything in one place!
+  - ./data:/app/data
 ```
 
 **Named Volumes (Production):**
 ```yaml
 volumes:
-  - clipshare_data:/app/processed-files
-  - clipshare_db:/app/prisma/db
-  - clipshare_temp:/app/temp
-  - clipshare_logs:/app/logs
+  # Single directory mount for production
+  - clipshare_data:/app/data
 ```
 
 ### Directory Structure
 
-After running, your data directory should look like:
+After running, your single data directory will look like:
 ```
 data/
 ├── processed-files/
@@ -108,24 +107,24 @@ data/
 
 ### Backup Recommendations
 
-**Critical Data to Backup:**
-1. `./data/processed-files` - Contains all user-generated clips
-2. `./data/db` - Database with workspaces and bookmarks
+**Easy Single-Directory Backup:**
+Since everything is in one directory, backup is simple:
 
-**Backup Script Example:**
 ```bash
 #!/bin/bash
 BACKUP_DIR="/backup/clipshare/$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$BACKUP_DIR"
 
-# Backup database
-cp -r ./data/db "$BACKUP_DIR/"
+# Backup entire data directory
+tar -czf "$BACKUP_DIR/clipshare-complete-backup.tar.gz" ./data/
 
-# Backup processed files (this can be large)
-tar -czf "$BACKUP_DIR/processed-files.tar.gz" ./data/processed-files/
-
-echo "Backup completed: $BACKUP_DIR"
+echo "Complete backup created: $BACKUP_DIR/clipshare-complete-backup.tar.gz"
 ```
+
+**Benefits of Single Data Directory:**
+- ✅ **Simple Setup**: Only one directory to mount
+- ✅ **Easy Backup**: Backup entire Clipshare installation with one command  
+- ✅ **Easy Migration**: Move between servers by copying one directory
+- ✅ **Clear Organization**: All data in one place with logical subdirectories
 
 The application requires several directories to be persistent:
 

@@ -27,9 +27,7 @@
 docker run -d \
   --name clipshare \
   -p 3000:3000 \
-  -v $(pwd)/data/processed-files:/app/processed-files \
-  -v $(pwd)/data/temp:/app/temp \
-  -v $(pwd)/data/db:/app/prisma/db \
+  -v $(pwd)/data:/app/data \
   --env-file .env \
   ghcr.io/craigjmidwinter/clipshare:v0.3.2
 ```
@@ -44,10 +42,14 @@ Use specific version tags in production for stability.
 
 ## Important Volume Mappings
 
-- **`/app/processed-files`** - All your video clips and workspace data (CRITICAL)
-- **`/app/temp`** - Temporary processing files
-- **`/app/prisma/db`** - Database files (if using SQLite)
+- **`/app/data`** - **SINGLE DATA DIRECTORY** - All your Clipshare data in one place!
+  - Contains: video clips, workspace data, database, logs, temp files
 
-⚠️ **Data Loss Warning**: Always map `/app/processed-files` and `/app/prisma/db` to persistent storage!
+⚠️ **Data Loss Warning**: Always map `/app/data` to persistent storage!
+
+**Benefits of Single Data Directory:**
+- ✅ Simple setup - only one directory to mount
+- ✅ Easy backup - backup everything with one command
+- ✅ Clear organization - all data in one place
 
 See `DOCKER_DEPLOYMENT.md` for complete documentation and backup strategies.

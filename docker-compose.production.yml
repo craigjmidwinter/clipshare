@@ -7,17 +7,9 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # CRITICAL: Persistent storage for all video clips and workspace data
-      - clipshare_data:/app/processed-files
-      
-      # Database storage - SQLite or mount external DB volume
-      - clipshare_db:/app/prisma/db
-      
-      # Temporary processing files (can use tmpfs for performance)
-      - clipshare_temp:/app/temp
-      
-      # Application logs for monitoring
-      - clipshare_logs:/app/logs
+      # SINGLE DATA DIRECTORY: All persistent data in one place for easy backup
+      # This single directory contains all your data: clips, database, logs, temp files
+      - clipshare_data:/app/data
       
       # Mount timezone data for accurate timestamps
       - /etc/localtime:/etc/localtime:ro
@@ -26,7 +18,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       
       # Database Configuration
-      - DATABASE_URL=file:/app/prisma/db/clipshare.db
+      - DATABASE_URL=file:/app/data/db/clipshare.db
       
       # Authentication (REQUIRED)
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
@@ -37,10 +29,10 @@ services:
       - PLEX_SERVER_URL=${PLEX_SERVER_URL}
       - PLEX_SERVER_TOKEN=${PLEX_SERVER_TOKEN}
       
-      # File Processing Configuration
-      - CLIPS_DIR=/app/processed-files/clips
-      - EXPORT_DIR=/app/processed-files/exports
-      - TEMP_DIR=/app/temp
+      # File Processing Configuration (all within single data directory)
+      - CLIPS_DIR=/app/data/processed-files/clips
+      - EXPORT_DIR=/app/data/processed-files/exports
+      - TEMP_DIR=/app/data/temp
       
       # Performance Configuration
       - PROCESS_CONCURRENCY=${PROCESS_CONCURRENCY:-4}
@@ -123,24 +115,6 @@ volumes:
       type: none
       o: bind
       device: /var/lib/clipshare/data
-  clipshare_db:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/clipshare/db
-  clipshare_temp:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/lib/clipshare/temp
-  clipshare_logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /var/log/clipshare
   postgres_data:
     driver: local
   nginx_logs:

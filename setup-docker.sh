@@ -54,19 +54,19 @@ esac
 
 # Create data directories
 echo ""
-echo "📁 Creating data directories..."
+echo "📁 Creating single data directory structure..."
 mkdir -p data/{processed-files,temp,db,logs}
 
 if [ "$choice" = "2" ]; then
     echo "Creating production directories..."
-    sudo mkdir -p /var/lib/clipshare/{data,db,temp} /var/log/clipshare 2>/dev/null || {
-        echo "⚠️ Could not create /var/lib/clipshare directories (requires sudo)"
+    sudo mkdir -p /var/lib/clipshare/data/{processed-files,db,temp,logs} 2>/dev/null || {
+        echo "⚠️ Could not create /var/lib/clipshare/data directories (requires sudo)"
         echo "   You may need to create these manually:"
-        echo "   sudo mkdir -p /var/lib/clipshare/{data,db,temp} /var/log/clipshare"
+        echo "   sudo mkdir -p /var/lib/clipshare/data/{processed-files,db,temp,logs}"
     }
 fi
 
-echo "✅ Data directories created"
+echo "✅ Single data directory structure created"
 
 # Copy environment file
 echo ""

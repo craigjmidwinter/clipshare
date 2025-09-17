@@ -7,18 +7,9 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # CRITICAL: Persistent storage for processed video files and clips
-      # This directory contains all your generated video clips and workspace data
-      - ./data/processed-files:/app/processed-files
-      
-      # Temporary files for video processing (can be ephemeral)
-      - ./data/temp:/app/temp
-      
-      # Database storage (SQLite) - IMPORTANT for data persistence
-      - ./data/db:/app/prisma/db
-      
-      # Application logs for debugging and monitoring
-      - ./data/logs:/app/logs
+      # SINGLE DATA DIRECTORY: All persistent data in one place for easy backup
+      # This single directory contains all your data: clips, database, logs, temp files
+      - ./data:/app/data
       
       # Optional: Configuration files and environment overrides
       # - ./.env.local:/app/.env.local:ro
@@ -27,7 +18,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       
       # Database Configuration (uncomment and configure)
-      # - DATABASE_URL=file:./db/dev.db
+      # - DATABASE_URL=file:./data/db/dev.db
       
       # Authentication (REQUIRED - generate strong secret)
       # - NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
@@ -38,10 +29,10 @@ services:
       # - PLEX_SERVER_URL=http://your-plex-server:32400
       # - PLEX_SERVER_TOKEN=your-plex-server-token
       
-      # File Processing Paths
-      # - CLIPS_DIR=/app/processed-files/clips
-      # - EXPORT_DIR=/app/processed-files/exports
-      # - TEMP_DIR=/app/temp
+      # File Processing Paths (all within single data directory)
+      # - CLIPS_DIR=/app/data/processed-files/clips
+      # - EXPORT_DIR=/app/data/processed-files/exports
+      # - TEMP_DIR=/app/data/temp
       
       # Performance Configuration
       # - PROCESS_CONCURRENCY=4
