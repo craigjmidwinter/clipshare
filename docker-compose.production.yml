@@ -17,17 +17,12 @@ services:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       
-      # Database Configuration
+      # Database Configuration (SQLite by default)
       - DATABASE_URL=file:/app/data/db/clipshare.db
       
-      # Authentication (REQUIRED)
+      # Authentication (REQUIRED for production)
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-https://clipshare.yourdomain.com}
-      
-      # Plex Integration (REQUIRED)
-      - PLEX_CLIENT_ID=${PLEX_CLIENT_ID}
-      - PLEX_SERVER_URL=${PLEX_SERVER_URL}
-      - PLEX_SERVER_TOKEN=${PLEX_SERVER_TOKEN}
       
       # File Processing Configuration (all within single data directory)
       - CLIPS_DIR=/app/data/processed-files/clips
@@ -45,33 +40,32 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    depends_on:
-      - postgres
     networks:
       - clipshare_network
 
-  # Production PostgreSQL database
-  postgres:
-    image: postgres:15-alpine
-    container_name: clipshare-postgres
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-clipshare}
-      - POSTGRES_USER=${POSTGRES_USER:-clipshare}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backups:/backups
-    ports:
-      - "5432:5432"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clipshare} -d ${POSTGRES_DB:-clipshare}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - clipshare_network
+  # Optional: PostgreSQL database for larger deployments
+  # Uncomment if you prefer PostgreSQL over SQLite and update DATABASE_URL above
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: clipshare-postgres
+  #   environment:
+  #     - POSTGRES_DB=${POSTGRES_DB:-clipshare}
+  #     - POSTGRES_USER=${POSTGRES_USER:-clipshare}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #     - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./backups:/backups
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clipshare} -d ${POSTGRES_DB:-clipshare}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - clipshare_network
 
   # Nginx reverse proxy for production
   nginx:

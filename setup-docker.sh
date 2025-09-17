@@ -70,18 +70,17 @@ echo "✅ Single data directory structure created"
 
 # Copy environment file
 echo ""
-echo "⚙️ Setting up environment configuration..."
+echo "⚙️ Setting up environment configuration (optional)..."
 if [ ! -f .env ]; then
     cp .env.docker .env
     echo "✅ Environment file created (.env)"
     echo ""
-    echo "🔧 IMPORTANT: Edit .env file with your configuration:"
-    echo "   - NEXTAUTH_SECRET (generate with: openssl rand -base64 32)"
+    echo "🔧 OPTIONAL: Edit .env file to customize:"
+    echo "   - NEXTAUTH_SECRET (for production security)"
     echo "   - NEXTAUTH_URL (your domain)"
-    echo "   - PLEX_CLIENT_ID, PLEX_SERVER_URL, PLEX_SERVER_TOKEN"
-    if [ "$choice" = "2" ]; then
-        echo "   - POSTGRES_PASSWORD (secure database password)"
-    fi
+    echo "   - Database and performance settings"
+    echo ""
+    echo "💡 Note: Plex configuration is handled by the welcome wizard!"
 else
     echo "✅ Environment file already exists"
 fi
@@ -110,14 +109,15 @@ echo ""
 echo "🎉 Setup complete!"
 echo ""
 echo "Next steps:"
-echo "1. Edit .env file with your configuration"
+echo "1. [OPTIONAL] Edit .env file for production settings"
 echo "2. Start the application:"
 if [ "$choice" = "1" ]; then
     echo "   docker compose up -d"
 else
     echo "   docker compose -f docker-compose.production.yml up -d"
 fi
-echo "3. Access Clipshare at http://localhost:3000"
+echo "3. Open browser and go through the welcome wizard for Plex setup"
+echo "4. Access Clipshare at http://localhost:3000"
 echo ""
 echo "For help:"
 echo "- View logs: docker compose logs -f clipshare"

@@ -17,9 +17,9 @@ mkdir -p data/{processed-files,temp,db,logs}
 # Set proper permissions for the data directories
 sudo chown -R 1001:1001 data/
 
-# Copy and edit the environment variables
-cp web/env.example .env
-# Edit .env with your configuration
+# Copy and edit the environment variables (OPTIONAL)
+cp .env.docker .env
+# Edit .env with your configuration (or leave defaults for testing)
 
 # Start the application
 docker-compose up -d
@@ -36,14 +36,10 @@ Use the production-optimized compose file:
 # Use production compose file with PostgreSQL, Nginx, and Redis
 cp docker-compose.production.yml docker-compose.yml
 
-# Create environment file with production settings
+# Create environment file with production settings (customize as needed)
 cat > .env << EOF
 NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
 NEXTAUTH_URL=https://clipshare.yourdomain.com
-PLEX_CLIENT_ID=your-plex-client-id
-PLEX_SERVER_URL=http://your-plex-server:32400
-PLEX_SERVER_TOKEN=your-plex-server-token
-POSTGRES_PASSWORD=secure-database-password
 EOF
 
 # Create required directories

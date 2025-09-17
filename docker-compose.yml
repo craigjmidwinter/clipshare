@@ -17,24 +17,19 @@ services:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
       
-      # Database Configuration (uncomment and configure)
+      # Database Configuration (optional - uses defaults if not set)
       # - DATABASE_URL=file:./data/db/dev.db
       
-      # Authentication (REQUIRED - generate strong secret)
+      # Authentication (OPTIONAL - generates random secret if not set)
       # - NEXTAUTH_SECRET=your-super-secret-key-at-least-32-characters-long
       # - NEXTAUTH_URL=http://localhost:3000
       
-      # Plex Integration (REQUIRED for functionality)
-      # - PLEX_CLIENT_ID=your-unique-client-id
-      # - PLEX_SERVER_URL=http://your-plex-server:32400
-      # - PLEX_SERVER_TOKEN=your-plex-server-token
-      
-      # File Processing Paths (all within single data directory)
+      # File Processing Paths (optional - uses defaults if not set)
       # - CLIPS_DIR=/app/data/processed-files/clips
       # - EXPORT_DIR=/app/data/processed-files/exports
       # - TEMP_DIR=/app/data/temp
       
-      # Performance Configuration
+      # Performance Configuration (optional)
       # - PROCESS_CONCURRENCY=4
       # - MAX_CONCURRENT_JOBS=2
     restart: unless-stopped
@@ -45,25 +40,8 @@ services:
       retries: 3
       start_period: 40s
 
-# Optional: Add a PostgreSQL database service for larger deployments
-# Uncomment the following section if you prefer PostgreSQL over SQLite
-  # postgres:
-  #   image: postgres:15-alpine
-  #   container_name: clipshare-db
-  #   environment:
-  #     POSTGRES_DB: clipshare
-  #     POSTGRES_USER: clipshare
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U clipshare"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+# Note: Plex configuration (server URL, token) is handled through the
+# welcome wizard on first startup - no environment variables needed!
 
 volumes:
   # Named volumes (alternative to bind mounts)
@@ -71,4 +49,3 @@ volumes:
   processed_files:
   temp_files:
   db_data:
-  # postgres_data:

@@ -10,8 +10,7 @@ Use the standard `docker-compose.yml` for development and testing:
 git clone https://github.com/craigjmidwinter/clipshare.git
 cd clipshare
 mkdir -p data/{processed-files,temp,db,logs}
-cp .env.docker .env
-# Edit .env with your configuration
+cp .env.docker .env  # Optional - customize as needed
 docker compose up -d
 ```
 
@@ -23,9 +22,9 @@ Use `docker-compose.production.yml` for production environments with PostgreSQL,
 # Copy production compose file
 cp docker-compose.production.yml docker-compose.override.yml
 
-# Create production environment file
+# Create environment file (minimal for production)
 cp .env.docker .env
-# Edit .env with production values
+# Edit .env with production values (mainly NEXTAUTH_SECRET)
 
 # Create required directories
 sudo mkdir -p /var/lib/clipshare/data/{processed-files,db,temp,logs}
