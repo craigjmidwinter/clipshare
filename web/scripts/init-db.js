@@ -5,11 +5,17 @@ const fs = require('fs');
 const path = require('path');
 
 console.log('Initializing database...');
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
+
+// Set DATABASE_URL if not provided
+const databaseUrl = process.env.DATABASE_URL || 'file:/app/data/db/clipshare.db';
+console.log('DATABASE_URL:', databaseUrl);
+
+// Set the environment variable for this process
+process.env.DATABASE_URL = databaseUrl;
 
 try {
   // Check if database file exists
-  const dbPath = process.env.DATABASE_URL?.replace('file:', '') || '/app/data/db/clipshare.db';
+  const dbPath = databaseUrl.replace('file:', '');
   const dbDir = path.dirname(dbPath);
   
   console.log('Database path:', dbPath);
@@ -21,11 +27,12 @@ try {
     console.log('Created database directory:', dbDir);
   }
   
-  // Run prisma db push
+  // Run prisma db push with explicit DATABASE_URL
   console.log('Running prisma db push...');
   execSync('prisma db push --accept-data-loss', { 
     stdio: 'inherit',
-    cwd: '/app'
+    cwd: '/app',
+    env: { ...process.env, DATABASE_URL: databaseUrl }
   });
   
   console.log('Database initialized successfully');
