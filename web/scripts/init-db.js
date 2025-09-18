@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 console.log('Initializing database...');
 
@@ -19,7 +19,7 @@ async function recoverStuckProcessingJobs() {
   try {
     // Use Prisma CLI to run a recovery script
     const recoveryScript = `
-      const { PrismaClient } = require('@prisma/client');
+      import { PrismaClient } from '@prisma/client';
       const prisma = new PrismaClient();
       
       async function recoverStuckJobs() {
@@ -108,7 +108,7 @@ async function recoverStuckProcessingJobs() {
     `;
     
     // Write the recovery script to a temporary file
-    const tempScriptPath = '/tmp/recovery-script.js';
+    const tempScriptPath = '/tmp/recovery-script.mjs';
     fs.writeFileSync(tempScriptPath, recoveryScript);
     
     // Execute the recovery script
