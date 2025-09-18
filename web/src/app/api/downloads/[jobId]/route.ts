@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import path from "path"
 import { promises as fs } from "fs"
+import { getProcessedFilesDir } from "@/lib/data-dirs"
 
 export async function GET(
   request: NextRequest,
@@ -66,8 +67,7 @@ export async function GET(
 
     // Construct file path
     const clipPath = path.join(
-      process.cwd(), 
-      'processed-files', 
+      getProcessedFilesDir(), 
       job.workspaceId, 
       'clips', 
       `${payload.bookmarkId}.mp4`

@@ -64,6 +64,21 @@ export async function GET(
       if (!hasAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // First check if the clip job is completed
+    const job = await prisma.processingJob.findFirst({
+      where: {
+        type: 'export_clip',
+        payloadJson: { contains: `"bookmarkId":"${bookmarkId}"` }
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    // If no job exists or job is not completed, return error
+    if (!job || job.status !== 'completed') {
+      console.log('Clip not ready:', { jobStatus: job?.status || 'no job' })
+      return NextResponse.json({ error: 'Clip not ready' }, { status: 404 })
+    }
+
     const clipPath = path.join(getProcessedFilesDir(), workspaceId, 'clips', `${bookmarkId}.mp4`)
     console.log('Looking for clip at:', clipPath)
     

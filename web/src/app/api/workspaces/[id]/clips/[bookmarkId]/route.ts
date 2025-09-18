@@ -33,21 +33,42 @@ export async function GET(
       bookmark.workspace.memberships.some(m => m.userId === session.user.id)
     if (!hasAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const clipPath = path.join(getProcessedFilesDir(), workspaceId, 'clips', `${bookmarkId}.mp4`)
-    try {
-      await fs.stat(clipPath)
-      return NextResponse.json({ ready: true, status: 'completed', progressPercent: 100 })
-    } catch {
-      // Lookup latest job for this bookmark for progress
-      const job = await prisma.processingJob.findFirst({
-        where: {
-          type: 'export_clip',
-          payloadJson: { contains: `"bookmarkId":"${bookmarkId}"` }
-        },
-        orderBy: { updatedAt: 'desc' }
-      })
-      return NextResponse.json({ ready: false, status: job?.status || 'pending', progressPercent: job?.progressPercent ?? 0 }, { status: 404 })
+    // First check the latest job status for this bookmark
+    const job = await prisma.processingJob.findFirst({
+      where: {
+        type: 'export_clip',
+        payloadJson: { contains: `"bookmarkId":"${bookmarkId}"` }
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    // If no job exists, clip hasn't been requested yet
+    if (!job) {
+      return NextResponse.json({ ready: false, status: 'pending', progressPercent: 0 }, { status: 404 })
     }
+
+    // If job is completed, verify the file actually exists
+    if (job.status === 'completed') {
+      const clipPath = path.join(getProcessedFilesDir(), workspaceId, 'clips', `${bookmarkId}.mp4`)
+      try {
+        await fs.stat(clipPath)
+        return NextResponse.json({ ready: true, status: 'completed', progressPercent: 100 })
+      } catch {
+        // Job says completed but file doesn't exist - mark as failed
+        await prisma.processingJob.update({
+          where: { id: job.id },
+          data: { status: 'failed', errorText: 'Clip file not found after completion' }
+        })
+        return NextResponse.json({ ready: false, status: 'failed', progressPercent: 0 }, { status: 404 })
+      }
+    }
+
+    // For all other job statuses (pending, processing, failed, cancelled), return the job status
+    return NextResponse.json({ 
+      ready: false, 
+      status: job.status, 
+      progressPercent: job.progressPercent ?? 0 
+    }, { status: 404 })
   } catch (e) {
     console.error('clip head error', e)
     return NextResponse.json({ error: 'failed' }, { status: 500 })
