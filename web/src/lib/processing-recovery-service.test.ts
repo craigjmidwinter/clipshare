@@ -13,6 +13,10 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       updateMany: vi.fn(),
       groupBy: vi.fn()
+    },
+    video: {
+      findMany: vi.fn(),
+      updateMany: vi.fn()
     }
   }
 }))
@@ -26,7 +30,7 @@ describe('ProcessingRecoveryService', () => {
   })
 
   describe('recoverStuckProcessingJobs', () => {
-    it('should recover stuck workspaces and jobs', async () => {
+    it('should recover stuck workspaces, jobs, and videos', async () => {
       const mockStuckWorkspaces = [
         {
           id: 'workspace-1',
@@ -61,20 +65,29 @@ describe('ProcessingRecoveryService', () => {
         }
       ]
 
+      const mockStuckVideos = [
+        { id: 'video-1', workspaceId: 'workspace-1', processingStatus: 'processing' },
+        { id: 'video-2', workspaceId: 'workspace-2', processingStatus: 'processing' }
+      ]
+
       // Mock prisma calls
       const { prisma } = await import('@/lib/prisma')
       vi.mocked(prisma.workspace.findMany).mockResolvedValue(mockStuckWorkspaces)
       vi.mocked(prisma.processingJob.findMany).mockResolvedValue(mockStuckJobs)
+      vi.mocked(prisma.video.findMany).mockResolvedValue(mockStuckVideos as any)
       vi.mocked(prisma.workspace.updateMany).mockResolvedValue({ count: 2 })
       vi.mocked(prisma.processingJob.updateMany).mockResolvedValue({ count: 2 })
+      vi.mocked(prisma.video.updateMany).mockResolvedValue({ count: 2 } as any)
 
       const stats = await service.recoverStuckProcessingJobs()
 
       expect(stats).toEqual({
         stuckWorkspaces: 2,
         stuckJobs: 2,
+        stuckVideos: 2,
         recoveredWorkspaces: 2,
-        recoveredJobs: 2
+        recoveredJobs: 2,
+        recoveredVideos: 2
       })
 
       // Verify workspace updates
@@ -94,6 +107,16 @@ describe('ProcessingRecoveryService', () => {
           errorText: 'Processing interrupted by application restart'
         }
       })
+
+      // Verify video updates
+      expect(prisma.video.updateMany).toHaveBeenCalledWith({
+        where: { processingStatus: 'processing' },
+        data: {
+          processingStatus: 'failed',
+          processingProgress: 0,
+          processingError: 'Processing interrupted by application restart'
+        }
+      })
     })
 
     it('should handle no stuck jobs gracefully', async () => {
@@ -101,19 +124,24 @@ describe('ProcessingRecoveryService', () => {
       const { prisma } = await import('@/lib/prisma')
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([])
       vi.mocked(prisma.processingJob.findMany).mockResolvedValue([])
+      const { prisma } = await import('@/lib/prisma')
+      vi.mocked(prisma.video.findMany).mockResolvedValue([] as any)
 
       const stats = await service.recoverStuckProcessingJobs()
 
       expect(stats).toEqual({
         stuckWorkspaces: 0,
         stuckJobs: 0,
+        stuckVideos: 0,
         recoveredWorkspaces: 0,
-        recoveredJobs: 0
+        recoveredJobs: 0,
+        recoveredVideos: 0
       })
 
       // Verify no updates were called
       expect(prisma.workspace.updateMany).not.toHaveBeenCalled()
       expect(prisma.processingJob.updateMany).not.toHaveBeenCalled()
+      expect(prisma.video.updateMany).not.toHaveBeenCalled()
     })
   })
 

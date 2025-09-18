@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProcessHealthStatus } from '@/lib/process-monitor'
+import { ProcessingRecoveryService } from '@/lib/processing-recovery-service'
+
+let hasRunRecovery = false
 
 export async function GET(request: NextRequest) {
   try {
+    if (!hasRunRecovery) {
+      hasRunRecovery = true
+      try {
+        const recoveryService = ProcessingRecoveryService.getInstance()
+        await recoveryService.recoverStuckProcessingJobs()
+      } catch (err) {
+        console.error('Startup processing recovery failed:', err)
+      }
+    }
     const healthStatus = getProcessHealthStatus()
     
     return NextResponse.json({

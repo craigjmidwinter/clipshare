@@ -31,8 +31,11 @@ ENV NODE_ENV=production
 # Disable telemetry during runtime.
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install system dependencies needed by the app
-RUN apk add --no-cache ffmpeg python3 py3-pip shadow curl
+# Install system dependencies needed by the app (install yt-dlp from apk for a real binary in PATH)
+RUN apk add --no-cache ffmpeg yt-dlp shadow curl
+
+# Ensure the application knows where yt-dlp lives inside the container
+ENV YT_DLP_PATH=/usr/bin/yt-dlp
 
 # Install Prisma CLI for database initialization
 RUN npm install -g prisma@latest

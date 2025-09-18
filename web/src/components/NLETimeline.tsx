@@ -109,6 +109,7 @@ interface NLETimelineProps {
   snappingSettings?: SnappingSettings
   onSnappingSettingsUpdate?: (settings: Partial<SnappingSettings>) => void
   isProducer?: boolean
+  framesBaseUrl?: string | null
 }
 
 export default function NLETimeline({
@@ -128,7 +129,8 @@ export default function NLETimeline({
   shotCuts = [],
   snappingSettings,
   onSnappingSettingsUpdate,
-  isProducer = false
+  isProducer = false,
+  framesBaseUrl = undefined
 }: NLETimelineProps) {
   
   // Debug logging (commented out to prevent console spam)
@@ -161,12 +163,25 @@ export default function NLETimeline({
   const [showSnappingSettings, setShowSnappingSettings] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [selectedBookmarkForPreview, setSelectedBookmarkForPreview] = useState<Bookmark | null>(null)
+  const [isZoomDragging, setIsZoomDragging] = useState<null | 'viewport' | 'left' | 'right'>(null)
+  const [zoomDragStart, setZoomDragStart] = useState<{ x: number; leftFraction: number; rightFraction: number }>({ x: 0, leftFraction: 0, rightFraction: 0 })
+  const scrollbarRef = useRef<HTMLDivElement>(null)
   
   const timelineRef = useRef<HTMLDivElement>(null)
   const frameWidth = 4 // pixels per frame at zoom level 1
   const totalWidth = Math.max(1000, isFinite(duration) && isFinite(frameRate) && isFinite(frameWidth) && isFinite(zoom) 
     ? duration * frameRate * frameWidth * zoom 
     : 1000) // Minimum width with validation
+  const containerClientWidth = timelineRef.current?.clientWidth || 1000
+  const maxScroll = Math.max(0, totalWidth - containerClientWidth)
+  const pixelsPerSecond = isFinite(frameRate * frameWidth * zoom) && frameRate * frameWidth * zoom > 0 
+    ? frameRate * frameWidth * zoom 
+    : 1
+  const visibleStartSec = Math.max(0, scrollPosition / pixelsPerSecond)
+  const visibleEndSec = Math.min(duration, (scrollPosition + containerClientWidth) / pixelsPerSecond)
+  const visibleDurationSec = Math.max(0.0001, visibleEndSec - visibleStartSec)
+  const leftFraction = duration > 0 ? visibleStartSec / duration : 0
+  const rightFraction = duration > 0 ? visibleEndSec / duration : 1
   
   // Frame preview management
   const [framePreviews, setFramePreviews] = useState<Map<number, string>>(new Map())
@@ -181,9 +196,9 @@ export default function NLETimeline({
 
   // Server-provided per-second frames for ribbon
   const getServerPreviewBySecond = useCallback((second: number) => {
-    if (!workspaceId) return null
-    return `/api/workspaces/${workspaceId}/frames?second=${second}`
-  }, [workspaceId])
+    if (!framesBaseUrl) return null
+    return `${framesBaseUrl}?second=${second}`
+  }, [framesBaseUrl])
   
   // Debug frame previews
   useEffect(() => {
@@ -474,6 +489,7 @@ export default function NLETimeline({
       setDragPreview(null) // Clear drag preview
     }
     setIsDragging(null)
+    setIsZoomDragging(null)
   }
 
   const handleTimelineClick = (e: React.MouseEvent) => {
@@ -546,6 +562,80 @@ export default function NLETimeline({
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollPosition(e.currentTarget.scrollLeft)
   }
+
+  // Zoom scrollbar interactions
+  const clampFraction = (value: number) => Math.max(0, Math.min(1, value))
+
+  const setViewportByFractions = (newLeftFraction: number, newRightFraction: number) => {
+    if (!timelineRef.current) return
+    const clLeft = clampFraction(Math.min(newLeftFraction, newRightFraction - 0.001))
+    const clRight = clampFraction(Math.max(newRightFraction, clLeft + 0.001))
+    const desiredStartSec = clLeft * duration
+    const desiredEndSec = clRight * duration
+    const desiredVisibleSec = Math.max(0.001, desiredEndSec - desiredStartSec)
+    const containerWidthPx = timelineRef.current.clientWidth || 1000
+    const newZoom = containerWidthPx / (desiredVisibleSec * frameRate * frameWidth)
+    // Limit zoom similarly to button handler
+    const minZoom = 100 / (duration * frameRate * frameWidth)
+    const maxZoom = containerWidthPx / (10 * frameRate * frameWidth)
+    const clampedZoom = Math.max(minZoom, Math.min(maxZoom, newZoom))
+    setZoom(clampedZoom)
+    // Recompute total width with new zoom and set scroll accordingly
+    const newPixelsPerSecond = frameRate * frameWidth * clampedZoom
+    const newScroll = desiredStartSec * newPixelsPerSecond
+    const newTotalWidth = duration * frameRate * frameWidth * clampedZoom
+    const newMaxScroll = Math.max(0, newTotalWidth - containerWidthPx)
+    setScrollPosition(Math.max(0, Math.min(newMaxScroll, newScroll)))
+  }
+
+  const onZoomViewportMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const rect = scrollbarRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setIsZoomDragging('viewport')
+    setZoomDragStart({ x: e.clientX, leftFraction, rightFraction })
+  }
+
+  const onZoomHandleMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsZoomDragging(side)
+    setZoomDragStart({ x: e.clientX, leftFraction, rightFraction })
+  }
+
+  const handleDocumentMouseMoveForZoom = (e: MouseEvent) => {
+    if (!isZoomDragging || !scrollbarRef.current) return
+    const rect = scrollbarRef.current.getBoundingClientRect()
+    const deltaPx = e.clientX - zoomDragStart.x
+    const deltaFraction = rect.width > 0 ? (deltaPx / rect.width) : 0
+    if (isZoomDragging === 'viewport') {
+      const newLeft = clampFraction(zoomDragStart.leftFraction + deltaFraction)
+      const widthFrac = Math.max(0.001, zoomDragStart.rightFraction - zoomDragStart.leftFraction)
+      const newRight = clampFraction(newLeft + widthFrac)
+      // If hitting right edge, shift left accordingly to preserve width
+      const adjustedLeft = newRight - widthFrac < 0 ? 0 : Math.max(0, Math.min(newLeft, 1 - widthFrac))
+      setViewportByFractions(adjustedLeft, adjustedLeft + widthFrac)
+    } else if (isZoomDragging === 'left') {
+      const newLeft = clampFraction(zoomDragStart.leftFraction + deltaFraction)
+      setViewportByFractions(newLeft, zoomDragStart.rightFraction)
+    } else if (isZoomDragging === 'right') {
+      const newRight = clampFraction(zoomDragStart.rightFraction + deltaFraction)
+      setViewportByFractions(zoomDragStart.leftFraction, newRight)
+    }
+  }
+
+  useEffect(() => {
+    if (isZoomDragging) {
+      const onMove = (e: MouseEvent) => handleDocumentMouseMoveForZoom(e)
+      const onUp = () => setIsZoomDragging(null)
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+      return () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+      }
+    }
+  }, [isZoomDragging, zoomDragStart])
 
   const handlePreviewClip = (bookmark: Bookmark) => {
     setSelectedBookmarkForPreview(bookmark)
@@ -831,7 +921,29 @@ export default function NLETimeline({
       {/* Timeline Container */}
       <div className="relative bg-gray-800 rounded-lg overflow-hidden">
         {/* Frame Preview Ribbon */}
-        <div className="h-12 bg-gray-700 border-b border-gray-600 relative overflow-hidden">
+        <div 
+          className="h-12 bg-gray-700 border-b border-gray-600 relative overflow-hidden"
+          onMouseDown={(e) => {
+            // Scrub by dragging on the frame ribbon
+            const startX = e.clientX
+            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+            const startPos = startX - rect.left
+            const startTime = positionToTime(startPos)
+            onSeek(Math.max(0, Math.min(duration, startTime)))
+
+            const handleMove = (evt: MouseEvent) => {
+              const pos = evt.clientX - rect.left
+              const t = positionToTime(pos)
+              onSeek(Math.max(0, Math.min(duration, t)))
+            }
+            const handleUp = () => {
+              window.removeEventListener('mousemove', handleMove)
+              window.removeEventListener('mouseup', handleUp)
+            }
+            window.addEventListener('mousemove', handleMove)
+            window.addEventListener('mouseup', handleUp)
+          }}
+        >
           <div className="absolute inset-0">
             {generateFramePreviews()}
           </div>
@@ -1003,6 +1115,46 @@ export default function NLETimeline({
             </div>
           </div>
         </div>
+
+      {/* Zoom Scrollbar */}
+      <div className="px-2 py-2 bg-gray-800">
+        <div
+          ref={scrollbarRef}
+          data-testid="zoom-scrollbar"
+          className="relative h-5 bg-gray-700 rounded"
+        >
+          {/* Full range background */}
+          <div className="absolute inset-0 rounded bg-gray-700" />
+          {/* Viewport band */}
+          <div
+            data-testid="zoom-scrollbar-viewport"
+            className="absolute top-0 bottom-0 bg-blue-600 bg-opacity-40 border border-blue-400 rounded cursor-grab"
+            style={{
+              left: `${leftFraction * 100}%`,
+              width: `${Math.max(0, (rightFraction - leftFraction) * 100)}%`,
+            }}
+            onMouseDown={onZoomViewportMouseDown}
+            title="Drag to pan visible range"
+          >
+            {/* Left handle */}
+            <div
+              role="slider"
+              title="Zoom range start"
+              className="absolute top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize"
+              style={{ left: 0 }}
+              onMouseDown={(e) => onZoomHandleMouseDown(e, 'left')}
+            />
+            {/* Right handle */}
+            <div
+              role="slider"
+              title="Zoom range end"
+              className="absolute top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize"
+              style={{ right: 0 }}
+              onMouseDown={(e) => onZoomHandleMouseDown(e, 'right')}
+            />
+          </div>
+        </div>
+      </div>
       </div>
 
       {/* Simple Name Prompt Modal */}

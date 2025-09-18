@@ -20,6 +20,7 @@ Clipshare is a full-stack Next.js application with the following stack:
 - **npm 10+** (verified: v10.8.2)
 - **Git** for version control
 - **Plex Media Server** for testing integration
+- **yt-dlp** for YouTube video downloads (install with `brew install yt-dlp`)
 
 ### Development Environment
 - **IDE**: VS Code recommended with extensions:

@@ -3,8 +3,10 @@ import { prisma } from '@/lib/prisma'
 export interface RecoveryStats {
   stuckWorkspaces: number
   stuckJobs: number
+  stuckVideos: number
   recoveredWorkspaces: number
   recoveredJobs: number
+  recoveredVideos: number
 }
 
 export class ProcessingRecoveryService {
@@ -101,11 +103,48 @@ export class ProcessingRecoveryService {
         console.log(`Marked ${recoveredJobs} processing jobs as failed.`)
       }
 
+      // Find all videos stuck in processing status
+      const stuckVideos = await prisma.video.findMany({
+        where: {
+          processingStatus: 'processing'
+        },
+        select: {
+          id: true,
+          workspaceId: true,
+          updatedAt: true
+        }
+      })
+
+      console.log(`Found ${stuckVideos.length} stuck processing videos:`)
+      stuckVideos.forEach(video => {
+        console.log(`- Video: ${video.id} (Workspace: ${video.workspaceId})`)
+        console.log(`  Last updated: ${video.updatedAt}`)
+      })
+
+      // Mark stuck videos as failed
+      let recoveredVideos = 0
+      if (stuckVideos.length > 0) {
+        const videoUpdateResult = await prisma.video.updateMany({
+          where: {
+            processingStatus: 'processing'
+          },
+          data: {
+            processingStatus: 'failed',
+            processingProgress: 0,
+            processingError: 'Processing interrupted by application restart'
+          }
+        })
+        recoveredVideos = (videoUpdateResult as any).count ?? 0
+        console.log(`Marked ${recoveredVideos} videos as failed.`)
+      }
+
       const stats: RecoveryStats = {
         stuckWorkspaces: stuckWorkspaces.length,
         stuckJobs: stuckJobs.length,
+        stuckVideos: stuckVideos.length,
         recoveredWorkspaces,
-        recoveredJobs
+        recoveredJobs,
+        recoveredVideos
       }
 
       console.log('=== PROCESSING RECOVERY COMPLETED ===')

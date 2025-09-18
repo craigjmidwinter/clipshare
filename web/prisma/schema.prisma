@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -23,8 +20,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -38,28 +34,28 @@ model Session {
 }
 
 model User {
-  id                    String    @id @default(cuid())
-  name                  String?
-  email                 String?   @unique
-  emailVerified         DateTime?
-  image                 String?
-  plexUserId            String?   @unique
-  plexUsername          String?
-  plexEmail             String?
-  plexAvatarUrl         String?
-  onboardingCompleted   Boolean   @default(false)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  accounts              Account[]
-  sessions              Session[]
-  workspaces            Workspace[]
-  memberships           Membership[]
-  createdBookmarks      Bookmark[] @relation("BookmarkCreator")
-  lockedBookmarks       Bookmark[] @relation("BookmarkLocker")
-  plexServers           PlexServer[]
-  onboardingSessions    OnboardingSession[]
-  plexPins              PlexPin[]
+  id                  String              @id @default(cuid())
+  name                String?
+  email               String?             @unique
+  emailVerified       DateTime?
+  image               String?
+  plexUserId          String?             @unique
+  plexUsername        String?
+  plexEmail           String?
+  plexAvatarUrl       String?
+  onboardingCompleted Boolean             @default(false)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  accounts            Account[]
+  lockedBookmarks     Bookmark[]          @relation("BookmarkLocker")
+  createdBookmarks    Bookmark[]          @relation("BookmarkCreator")
+  memberships         Membership[]
+  onboardingSessions  OnboardingSession[]
+  plexPins            PlexPin[]
+  plexServers         PlexServer[]
+  sessions            Session[]
+  addedVideos         Video[]
+  workspaces          Workspace[]
 }
 
 model VerificationToken {
@@ -71,147 +67,173 @@ model VerificationToken {
 }
 
 model Workspace {
-  id                String   @id @default(cuid())
-  producerId        String
-  plexKey           String
-  plexServerId      String
-  title             String
-  description       String?
-  contentType       String   // "movie" or "episode"
-  contentTitle      String
-  contentPoster     String?
-  contentDuration   Int      // duration in milliseconds
-  processingStatus  String   @default("pending") // "pending", "processing", "completed", "failed"
-  processingProgress Int     @default(0) // progress percentage 0-100
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  producer          User             @relation(fields: [producerId], references: [id], onDelete: Cascade)
-  memberships       Membership[]
-  bookmarks         Bookmark[]
-  processingJobs    ProcessingJob[]
-  shotCuts          ShotCut[]
-  snappingSettings  WorkspaceSnappingSettings?
+  id                 String                     @id @default(cuid())
+  producerId         String
+  plexKey            String
+  plexServerId       String
+  title              String
+  description        String?
+  contentType        String
+  contentTitle       String
+  contentPoster      String?
+  contentDuration    Int
+  processingStatus   String                     @default("pending")
+  processingProgress Int                        @default(0)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  bookmarks          Bookmark[]
+  memberships        Membership[]
+  processingJobs     ProcessingJob[]
+  shotCuts           ShotCut[]
+  videos             Video[]
+  producer           User                       @relation(fields: [producerId], references: [id], onDelete: Cascade)
+  snappingSettings   WorkspaceSnappingSettings?
 }
 
 model Membership {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   userId      String
-  role        String   // "producer" or "collaborator"
-  createdAt   DateTime @default(now())
-
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        String
+  createdAt   DateTime  @default(now())
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, userId])
 }
 
 model Bookmark {
-  id              String   @id @default(cuid())
-  workspaceId     String
-  createdById     String
-  label           String?
-  publicNotes     String?
-  privateNotes    String?
-  startMs         Int      // start time in milliseconds
-  endMs           Int      // end time in milliseconds
-  lockedById      String?  // User who locked this bookmark (Producer only)
-  lockedAt        DateTime? // When bookmark was locked
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy       User      @relation("BookmarkCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  lockedBy        User?     @relation("BookmarkLocker", fields: [lockedById], references: [id], onDelete: SetNull)
+  id           String    @id @default(cuid())
+  workspaceId  String
+  videoId      String?
+  createdById  String
+  label        String?
+  publicNotes  String?
+  privateNotes String?
+  startMs      Int
+  endMs        Int
+  lockedById   String?
+  lockedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lockedBy     User?     @relation("BookmarkLocker", fields: [lockedById], references: [id])
+  createdBy    User      @relation("BookmarkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  video        Video?    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model ProcessingJob {
-  id            String   @id @default(cuid())
-  workspaceId   String?
-  type          String   // "workspace_processing", "export_clip", "download_clip"
-  status        String   // "pending", "processing", "completed", "failed"
-  payloadJson   String   // JSON payload for the job
-  errorText     String?
-  progressPercent Int    @default(0) // progress percentage 0-100
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id              String     @id @default(cuid())
+  workspaceId     String?
+  type            String
+  status          String
+  payloadJson     String
+  errorText       String?
+  progressPercent Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  workspace       Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model PlexServer {
-  id          String   @id @default(cuid())
-  userId      String
-  serverUrl   String
-  token       String
-  name        String
-  lastSyncAt  DateTime?
-  status      String   @default("active") // "active", "inactive", "error"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(cuid())
+  userId     String
+  serverUrl  String
+  token      String
+  name       String
+  lastSyncAt DateTime?
+  status     String    @default("active")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
   @@unique([userId, serverUrl])
 }
 
 model PlexConfig {
-  id           String   @id @default(cuid())
-  clientId     String
-  serverUrl    String
-  serverToken  String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  clientId    String
+  serverUrl   String
+  serverToken String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model PlexPin {
-  id          String   @id @default(cuid())
-  pinId       String   @unique
-  pinCode     String
-  userId      String?
-  token       String?
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  pinId     String   @unique
+  pinCode   String
+  userId    String?
+  token     String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model OnboardingSession {
-  id              String   @id @default(cuid())
-  userId          String
-  currentStep     Int      @default(1)
-  completedSteps  String   // JSON array of completed step numbers
-  wizardDataJson  String?  // JSON data collected during wizard
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  userId         String
+  currentStep    Int      @default(1)
+  completedSteps String
+  wizardDataJson String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ShotCut {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   workspaceId     String
-  timestampMs     Int      // timestamp in milliseconds
-  confidence      Float    // confidence score 0.0-1.0
-  detectionMethod String   // "histogram", "edge", "motion", "combined"
-  createdAt       DateTime @default(now())
-
+  videoId         String?
+  timestampMs     Int
+  confidence      Float
+  detectionMethod String
+  createdAt       DateTime  @default(now())
+  video           Video?    @relation(fields: [videoId], references: [id], onDelete: Cascade)
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, timestampMs])
+  @@index([videoId, timestampMs])
 }
 
 model WorkspaceSnappingSettings {
-  id                   String   @id @default(cuid())
-  workspaceId          String   @unique
-  snappingEnabled       Boolean  @default(true)
-  snapDistanceMs        Int      @default(2000) // default 2 seconds
-  confidenceThreshold   Float    @default(0.7) // default 0.7 confidence threshold
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  workspaceId         String    @unique
+  snappingEnabled     Boolean   @default(true)
+  snapDistanceMs      Int       @default(2000)
+  confidenceThreshold Float     @default(0.7)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
 
-  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+model Video {
+  id                  String     @id @default(cuid())
+  workspaceId         String
+  title               String
+  description         String?
+  sourceType          String
+  sourceUrl           String?
+  plexKey             String?
+  plexServerId        String?
+  fileName            String?
+  fileSize            Int?
+  duration            Int?
+  thumbnailUrl        String?
+  processingStatus    String     @default("pending")
+  processingProgress  Int        @default(0)
+  processingError     String?
+  isPublicToWorkspace Boolean    @default(false)
+  addedById           String
+  accessControlWarned Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  bookmarks           Bookmark[]
+  shotCuts            ShotCut[]
+  addedBy             User       @relation(fields: [addedById], references: [id], onDelete: Cascade)
+  workspace           Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, sourceType])
 }

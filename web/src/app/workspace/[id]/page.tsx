@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import { 
   ArrowLeftIcon, 
@@ -30,6 +30,7 @@ import VideoPlayer from "@/components/VideoPlayer"
 import NLETimeline from "@/components/NLETimeline"
 import OBSExportModal from "@/components/OBSExportModal"
 import ClipPreviewModal from "@/components/ClipPreviewModal"
+import AddVideoModal from "@/components/AddVideoModal"
 import { useClipStatus } from "@/hooks/useClipStatus"
 
 // Download button component with loading state
@@ -229,6 +230,35 @@ export default function WorkspaceDetailPage() {
   // Clip preview state
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [selectedBookmarkForPreview, setSelectedBookmarkForPreview] = useState<any>(null)
+  
+  // Video management state
+  const [videos, setVideos] = useState<any[]>([])
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false)
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null) // null for main workspace video
+  const [loadingVideos, setLoadingVideos] = useState(false)
+
+  // Derived: currently selected video's metadata
+  const selectedVideoMeta = useMemo(() => {
+    if (!selectedVideo) return null
+    return videos.find(v => v.id === selectedVideo) || null
+  }, [selectedVideo, videos])
+
+  // Derived: duration to use (ms)
+  const displayedDurationMs = useMemo(() => {
+    return selectedVideoMeta?.duration ?? workspace?.contentDuration ?? 0
+  }, [selectedVideoMeta, workspace])
+
+  // Derived: bookmarks to display for current source
+  const displayedBookmarks = useMemo(() => {
+    if (!workspace) return [] as any[]
+    const all = workspace.bookmarks || []
+    if (selectedVideo === null) {
+      // Main workspace content: bookmarks without a videoId
+      return all.filter((b: any) => !b.videoId)
+    }
+    // Additional video: only bookmarks tied to that videoId
+    return all.filter((b: any) => b.videoId === selectedVideo)
+  }, [workspace, selectedVideo])
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -257,18 +287,48 @@ export default function WorkspaceDetailPage() {
       }
       
       setWorkspace(data.workspace)
-      
-      // Fetch shot cuts and snapping settings if workspace is processed
-      if (data.workspace.processingStatus === "completed") {
-        await Promise.all([
-          fetchShotCuts(),
-          fetchSnappingSettings()
-        ])
-      }
+
+      // Always fetch videos and other data; individual videos process independently
+      await Promise.all([
+        fetchVideos(),
+        fetchShotCuts(),
+        fetchSnappingSettings()
+      ])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch workspace")
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Poll videos while any are processing to keep progress bar fresh
+  useEffect(() => {
+    if (!workspaceId) return
+    if (videos.length === 0) return
+
+    const hasProcessing = videos.some(v => v.processingStatus === 'processing')
+    if (!hasProcessing) return
+
+    const interval = setInterval(() => {
+      fetchVideos().catch(() => {})
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [workspaceId, videos])
+
+  const fetchVideos = async () => {
+    try {
+      setLoadingVideos(true)
+      const response = await fetch(`/api/workspaces/${workspaceId}/videos`)
+      const data = await response.json()
+      
+      if (data.videos) {
+        setVideos(data.videos)
+      }
+    } catch (err) {
+      console.error("Failed to fetch videos:", err)
+    } finally {
+      setLoadingVideos(false)
     }
   }
 
@@ -304,6 +364,26 @@ export default function WorkspaceDetailPage() {
       }
     } catch (err) {
       console.error("Failed to load snapping settings:", err)
+    }
+  }
+
+  const handleAddVideo = async (formData: FormData) => {
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/videos`, {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to add video")
+      }
+
+      // Refresh videos list
+      await fetchVideos()
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : "Failed to add video")
     }
   }
 
@@ -554,6 +634,32 @@ export default function WorkspaceDetailPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete bookmark")
+    }
+  }
+
+  const handleDeleteVideo = async (videoId: string) => {
+    try {
+      setError("")
+
+      const response = await fetch(`/api/workspaces/${workspaceId}/videos/${videoId}`, {
+        method: "DELETE"
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to delete video")
+      }
+
+      // Update videos state by removing deleted video
+      setVideos(videos.filter(v => v.id !== videoId))
+      
+      // If the deleted video was selected, reset selection
+      if (selectedVideo === videoId) {
+        setSelectedVideo(null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete video")
     }
   }
 
@@ -1072,6 +1178,7 @@ export default function WorkspaceDetailPage() {
                     plexKey={workspace.plexKey}
                     plexServerId={workspace.plexServerId}
                     contentDuration={workspace.contentDuration}
+                    selectedVideoId={selectedVideo}
                     onBookmarkCreate={handleCreateBookmark}
                     onBookmarkUpdate={handleEditBookmark}
                     onBookmarkDelete={handleDeleteBookmark}
@@ -1109,10 +1216,11 @@ export default function WorkspaceDetailPage() {
             <div className="lg:col-span-2">
               <div className="bg-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-hidden">
                 <NLETimeline
-                  duration={workspace.contentDuration / 1000} // Convert ms to seconds
+                  key={selectedVideo ?? 'workspace-main'}
+                  duration={displayedDurationMs / 1000} // Convert ms to seconds
                   currentTime={currentTime}
                   onSeek={handleVideoSeek}
-                  bookmarks={workspace.bookmarks}
+                  bookmarks={displayedBookmarks}
                   onBookmarkCreate={handleCreateBookmark}
                   onBookmarkUpdate={handleBookmarkUpdate}
                   onBookmarkDelete={handleDeleteBookmark}
@@ -1122,10 +1230,13 @@ export default function WorkspaceDetailPage() {
                   onPlayPause={handleVideoPlayPause}
                   onStep={handleVideoStep}
                   workspaceId={workspace.id}
-                  shotCuts={shotCuts}
+                  shotCuts={selectedVideo ? [] : shotCuts}
                   snappingSettings={snappingSettings}
                   onSnappingSettingsUpdate={updateSnappingSettings}
                   isProducer={isProducer}
+                  framesBaseUrl={selectedVideo 
+                    ? `/api/workspaces/${workspace.id}/videos/${selectedVideo}/frames`
+                    : `/api/workspaces/${workspace.id}/frames`}
                 />
               </div>
             </div>
@@ -1245,6 +1356,159 @@ export default function WorkspaceDetailPage() {
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Videos */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <PlayIcon className="h-5 w-5 mr-2" />
+                    Videos ({videos.length + 1})
+                  </h3>
+                  {workspace.processingStatus === "completed" && (
+                    <button
+                      onClick={() => setShowAddVideoModal(true)}
+                      className="flex items-center px-3 py-1.5 text-sm font-medium text-orange-600 bg-orange-50 border border-orange-200 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-1" />
+                      Add Video
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  {/* Main workspace video */}
+                  <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                    selectedVideo === null 
+                      ? 'border-orange-200 bg-orange-50' 
+                      : 'border-gray-200 bg-gray-50'
+                  }`}>
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <img
+                          src={workspace.contentPoster || "/default-video-thumbnail.png"}
+                          alt={workspace.contentTitle}
+                          className="h-12 w-16 rounded object-cover"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {workspace.contentTitle}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Main workspace video • {workspace.contentType}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedVideo(null)}
+                      className={`px-3 py-1 text-xs font-medium rounded ${
+                        selectedVideo === null
+                          ? 'text-orange-700 bg-orange-100'
+                          : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                      }`}
+                    >
+                      {selectedVideo === null ? 'Active' : 'Select'}
+                    </button>
+                  </div>
+
+                  {/* Additional videos */}
+                  {videos.map((video) => (
+                    <div key={video.id} className={`flex items-center justify-between p-3 rounded-lg border ${
+                      selectedVideo === video.id 
+                        ? 'border-orange-200 bg-orange-50' 
+                        : 'border-gray-200 bg-gray-50'
+                    }`}>
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-shrink-0">
+                          <img
+                            src={video.thumbnailUrl || "/default-video-thumbnail.png"}
+                            alt={video.title}
+                            className="h-12 w-16 rounded object-cover"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {video.title}
+                          </p>
+                          <div className="flex items-center space-x-2">
+                            <p className="text-xs text-gray-500">
+                              {video.sourceType} • Added by {video.addedBy.plexUsername || video.addedBy.name}
+                            </p>
+                            {!video.isPublicToWorkspace && (
+                              <EyeSlashIcon className="h-3 w-3 text-gray-400" title="Private to workspace" />
+                            )}
+                            {video.isPublicToWorkspace && (
+                              <UsersIcon className="h-3 w-3 text-green-500" title="Public to workspace" />
+                            )}
+                          </div>
+                          {video.processingStatus === 'processing' && (
+                            <div className="flex items-center space-x-2 mt-1">
+                              <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                                <div 
+                                  className="bg-orange-600 h-1.5 rounded-full transition-all duration-300"
+                                  style={{ width: `${video.processingProgress}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {video.processingProgress}%
+                              </span>
+                            </div>
+                          )}
+                          {video.processingStatus === 'failed' && (
+                            <p className="text-xs text-red-500 mt-1">
+                              Processing failed
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {video.processingStatus === 'completed' && (
+                          <button
+                            onClick={() => {
+                              setSelectedVideo(video.id)
+                              // Reset player time so timeline snaps to new video
+                              if (videoElement) {
+                                try { videoElement.pause() } catch {}
+                                videoElement.currentTime = 0
+                              }
+                            }}
+                            className={`px-3 py-1 text-xs font-medium rounded ${
+                              selectedVideo === video.id
+                                ? 'text-orange-700 bg-orange-100'
+                                : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                            }`}
+                          >
+                            {selectedVideo === video.id ? 'Active' : 'Select'}
+                          </button>
+                        )}
+                        {/* Delete button - only show for videos added by current user or if user is workspace producer */}
+                        {(video.addedById === session?.user?.id || workspace?.producerId === session?.user?.id) && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete "${video.title}"? This action cannot be undone.`)) {
+                                handleDeleteVideo(video.id)
+                              }
+                            }}
+                            className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
+                            title="Delete video"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {videos.length === 0 && workspace.processingStatus === "completed" && (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500 mb-2">No additional videos yet</p>
+                      <p className="text-xs text-gray-400">
+                        Add videos by uploading files or providing YouTube URLs
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Bookmarks */}
@@ -1723,6 +1987,14 @@ export default function WorkspaceDetailPage() {
           workspaceId={workspaceId}
         />
       )}
+
+      {/* Add Video Modal */}
+      <AddVideoModal
+        isOpen={showAddVideoModal}
+        onClose={() => setShowAddVideoModal(false)}
+        onAddVideo={handleAddVideo}
+        workspaceId={workspaceId}
+      />
     </div>
   )
 }

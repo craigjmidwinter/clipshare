@@ -28,6 +28,7 @@ interface VideoPlayerProps {
   plexKey: string
   plexServerId: string
   contentDuration: number
+  selectedVideoId?: string
   onBookmarkCreate: (bookmark: {
     label?: string
     publicNotes?: string
@@ -329,6 +330,7 @@ export default function VideoPlayer({
   plexKey,
   plexServerId,
   contentDuration,
+  selectedVideoId,
   onBookmarkCreate,
   onBookmarkUpdate,
   onBookmarkDelete,
@@ -516,6 +518,10 @@ export default function VideoPlayer({
     }
   }, [isSelectingRange, rangeStart, duration])
 
+  const sourceKey = selectedVideoId 
+    ? `ws:${workspaceId}|video:${selectedVideoId}` 
+    : `ws:${workspaceId}|plex:${plexKey}|${plexServerId}`
+
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -540,9 +546,31 @@ export default function VideoPlayer({
       }
     }
 
-    // Use DASH streaming for audio compatibility (like Plex Web)
+    // Use DASH for main workspace content; use direct MP4 stream for selected per-video playback
     const setupDASH = async () => {
       try {
+        // If a specific workspace video is selected, stream the processed MP4
+        if (selectedVideoId) {
+          console.log("Setting up direct MP4 stream for video:", selectedVideoId)
+          try {
+            const tokenRes = await fetch(`/api/workspaces/${workspaceId}/videos/${selectedVideoId}/token`)
+            const tokenData = await tokenRes.json()
+            if (!tokenRes.ok || !tokenData.token) {
+              throw new Error(tokenData.error || 'Failed to get video token')
+            }
+            const streamUrl = `/api/workspaces/${workspaceId}/videos/${selectedVideoId}/stream?token=${tokenData.token}`
+            // Point the HTML5 video to the MP4 stream and reload
+            video.src = streamUrl
+            try { video.load() } catch {}
+            setIsLoading(false)
+          } catch (err) {
+            console.error('Failed to setup direct MP4 stream:', err)
+            setError('Failed to load selected video.')
+            setIsLoading(false)
+          }
+          return
+        }
+
         console.log("Setting up DASH for:", { plexKey, plexServerId })
 
         // First, get the DASH URL from our API
@@ -777,7 +805,7 @@ export default function VideoPlayer({
         }
       }
     }
-  }, [handleKeyDown, plexKey, plexServerId])
+  }, [handleKeyDown, sourceKey])
 
   const handleBookmarkSubmit = (data: {
     label?: string

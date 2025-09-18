@@ -275,6 +275,52 @@ describe('NLETimeline', () => {
     fireEvent.click(fitButton)
   })
 
+  it('renders zoom scrollbar with draggable viewport and handles', () => {
+    render(<NLETimeline {...mockProps} />)
+
+    // Scrollbar elements
+    const zoomScrollbar = screen.getByTestId('zoom-scrollbar')
+    const viewport = screen.getByTestId('zoom-scrollbar-viewport')
+    const leftHandle = screen.getByTitle('Zoom range start')
+    const rightHandle = screen.getByTitle('Zoom range end')
+
+    expect(zoomScrollbar).toBeInTheDocument()
+    expect(viewport).toBeInTheDocument()
+    expect(leftHandle).toBeInTheDocument()
+    expect(rightHandle).toBeInTheDocument()
+  })
+
+  it('allows dragging viewport to pan timeline', () => {
+    render(<NLETimeline {...mockProps} />)
+
+    const viewport = screen.getByTestId('zoom-scrollbar-viewport')
+
+    // Start dragging the viewport band
+    fireEvent.mouseDown(viewport, { clientX: 100, button: 0 })
+    fireEvent.mouseMove(document, { clientX: 200 })
+    fireEvent.mouseUp(document, { clientX: 200 })
+
+    // onSeek should not be called here; panning only affects scroll
+    expect(mockProps.onSeek).not.toHaveBeenCalled()
+  })
+
+  it('allows dragging handles to change zoom while keeping center', () => {
+    render(<NLETimeline {...mockProps} />)
+
+    const leftHandle = screen.getByTitle('Zoom range start')
+    const rightHandle = screen.getByTitle('Zoom range end')
+
+    // Drag left handle right to zoom in
+    fireEvent.mouseDown(leftHandle, { clientX: 100, button: 0 })
+    fireEvent.mouseMove(document, { clientX: 160 })
+    fireEvent.mouseUp(document, { clientX: 160 })
+
+    // Drag right handle left to zoom in further
+    fireEvent.mouseDown(rightHandle, { clientX: 300, button: 0 })
+    fireEvent.mouseMove(document, { clientX: 260 })
+    fireEvent.mouseUp(document, { clientX: 260 })
+  })
+
   it('formats timecodes correctly', () => {
     render(<NLETimeline {...mockProps} />)
     
