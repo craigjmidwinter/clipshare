@@ -1121,7 +1121,27 @@ export default function NLETimeline({
         <div
           ref={scrollbarRef}
           data-testid="zoom-scrollbar"
-          className="relative h-5 bg-gray-700 rounded"
+          className="relative h-5 bg-gray-700 rounded cursor-pointer"
+          onMouseDown={(e) => {
+            // If clicking outside the viewport, treat as viewport drag
+            const rect = scrollbarRef.current?.getBoundingClientRect()
+            if (!rect) return
+            const clickX = e.clientX - rect.left
+            const viewportLeft = leftFraction * rect.width
+            const viewportRight = rightFraction * rect.width
+            
+            // If click is outside viewport, drag the viewport to that position
+            if (clickX < viewportLeft || clickX > viewportRight) {
+              const clickFraction = clickX / rect.width
+              const viewportWidth = rightFraction - leftFraction
+              const newLeft = Math.max(0, Math.min(1 - viewportWidth, clickFraction - viewportWidth / 2))
+              const newRight = Math.min(1, newLeft + viewportWidth)
+              setViewportByFractions(newLeft, newRight)
+            } else {
+              // Click is on viewport, use normal viewport drag
+              onZoomViewportMouseDown(e)
+            }
+          }}
         >
           {/* Full range background */}
           <div className="absolute inset-0 rounded bg-gray-700" />
@@ -1131,7 +1151,7 @@ export default function NLETimeline({
             className="absolute top-0 bottom-0 bg-blue-600 bg-opacity-40 border border-blue-400 rounded cursor-grab"
             style={{
               left: `${leftFraction * 100}%`,
-              width: `${Math.max(0, (rightFraction - leftFraction) * 100)}%`,
+              width: `${Math.max(8, (rightFraction - leftFraction) * 100)}%`, // Minimum 8% width for grabbability
             }}
             onMouseDown={onZoomViewportMouseDown}
             title="Drag to pan visible range"

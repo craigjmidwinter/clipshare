@@ -304,6 +304,18 @@ describe('NLETimeline', () => {
     expect(mockProps.onSeek).not.toHaveBeenCalled()
   })
 
+  it('allows clicking outside viewport to move it to that position', () => {
+    render(<NLETimeline {...mockProps} />)
+
+    const scrollbar = screen.getByTestId('zoom-scrollbar')
+
+    // Click to the right of the viewport
+    fireEvent.mouseDown(scrollbar, { clientX: 500, button: 0 })
+
+    // Should not call onSeek, just move the viewport
+    expect(mockProps.onSeek).not.toHaveBeenCalled()
+  })
+
   it('allows dragging handles to change zoom while keeping center', () => {
     render(<NLETimeline {...mockProps} />)
 
