@@ -5,6 +5,9 @@ FROM node:20-alpine AS base
 FROM base AS deps
 WORKDIR /app
 
+# Install Python and other build dependencies needed by youtube-dl-exec
+RUN apk add --no-cache python3 py3-pip
+
 # Install all dependencies (including devDependencies needed for build)
 COPY package.json package-lock.json* ./
 RUN npm ci
