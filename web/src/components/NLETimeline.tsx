@@ -647,26 +647,180 @@ export default function NLETimeline({
     setSelectedBookmarkForPreview(null)
   }
 
-  const generateFrameMarkers = () => {
-    const markers = []
+  const generateRulerMarkers = () => {
+    const markers: React.ReactElement[] = []
     // Dynamic interval based on zoom level - more frequent labels
     let interval = 1
     let minorInterval = 0.5
-    if (zoom < 0.05) { interval = 600; minorInterval = 120 } // 10 minute intervals, 2 minute minors
-    else if (zoom < 0.1) { interval = 300; minorInterval = 60 } // 5 minute intervals, 1 minute minors
-    else if (zoom < 0.2) { interval = 120; minorInterval = 30 } // 2 minute intervals, 30 second minors
-    else if (zoom < 0.4) { interval = 60; minorInterval = 15 } // 1 minute intervals, 15 second minors
-    else if (zoom < 0.8) { interval = 30; minorInterval = 10 } // 30 second intervals, 10 second minors
-    else if (zoom < 1.5) { interval = 10; minorInterval = 5 } // 10 second intervals, 5 second minors
-    else if (zoom < 3) { interval = 5; minorInterval = 1 } // 5 second intervals, 1 second minors
-    else if (zoom < 6) { interval = 1; minorInterval = 0.5 } // 1 second intervals, 0.5 second minors
-    else { interval = 0.5; minorInterval = 0.1 } // 0.5 second intervals, 0.1 second minors
+    
+    // Debug: Check if we have valid duration
+    if (!duration || duration <= 0) {
+      console.log('NLETimeline: No valid duration for markers', { duration })
+      return markers
+    }
+    // Calculate intervals based on zoom level and container width
+    const containerWidth = timelineRef.current?.clientWidth || 1000
+    const pixelsPerSecond = frameRate * frameWidth * zoom
+    const secondsPerPixel = 1 / pixelsPerSecond
+    
+    // Calculate appropriate intervals based on visible time range
+    const visibleDuration = containerWidth * secondsPerPixel
+    
+    if (visibleDuration > 3600) { interval = 600; minorInterval = 120 } // 10 min / 2 min for very zoomed out
+    else if (visibleDuration > 1800) { interval = 300; minorInterval = 60 } // 5 min / 1 min
+    else if (visibleDuration > 600) { interval = 120; minorInterval = 30 } // 2 min / 30 sec
+    else if (visibleDuration > 300) { interval = 60; minorInterval = 15 } // 1 min / 15 sec
+    else if (visibleDuration > 120) { interval = 30; minorInterval = 10 } // 30 sec / 10 sec
+    else if (visibleDuration > 60) { interval = 15; minorInterval = 5 } // 15 sec / 5 sec
+    else if (visibleDuration > 30) { interval = 10; minorInterval = 2 } // 10 sec / 2 sec
+    else if (visibleDuration > 10) { interval = 5; minorInterval = 1 } // 5 sec / 1 sec
+    else if (visibleDuration > 5) { interval = 2; minorInterval = 0.5 } // 2 sec / 0.5 sec
+    else if (visibleDuration > 1) { interval = 1; minorInterval = 0.25 } // 1 sec / 0.25 sec
+    else { interval = 0.5; minorInterval = 0.1 } // 0.5 sec / 0.1 sec
     
     // Calculate visible time range based on scroll position and zoom
+    const startTime = Math.max(0, scrollPosition / pixelsPerSecond)
+    const endTime = Math.min(duration, (scrollPosition + containerWidth) / pixelsPerSecond)
+    
+    // Round to interval boundaries
+    const roundedStartTime = Math.floor(startTime / minorInterval) * minorInterval
+    const roundedEndTime = Math.ceil(endTime / minorInterval) * minorInterval
+    
+    for (let time = roundedStartTime; time <= roundedEndTime; time += minorInterval) {
+      if (time >= 0 && time <= duration) {
+        const position = timeToPosition(time)
+        const isMajorMarker = Math.abs(time % interval) < minorInterval / 2 // Major markers at interval boundaries
+        const isMediumMarker = Math.abs(time % (interval / 2)) < minorInterval / 2 && !isMajorMarker
+        
+        markers.push(
+          <div
+            key={time}
+            className={`absolute top-0 bottom-0 ${
+              isMajorMarker ? 'w-px bg-gray-300' : 
+              isMediumMarker ? 'w-px bg-gray-500' : 
+              'w-px bg-gray-700'
+            }`}
+            style={{ left: position }}
+          >
+            {/* Show timecode labels for major markers only */}
+            {isMajorMarker && (
+              <div className="absolute text-xs whitespace-nowrap font-mono px-1 py-0.5 rounded z-30 text-white bg-gray-800" 
+                   style={{ 
+                     fontSize: '10px', 
+                     fontWeight: 'bold',
+                     top: '2px', // Position slightly below the top edge
+                     left: '0px', // Start at the marker position
+                     transform: 'translateX(-50%)' // Center the label on the marker
+                   }}>
+                {formatTimecode(time)}
+              </div>
+            )}
+          </div>
+        )
+      }
+    }
+    
+    return markers
+  }
+
+  const generateFullHeightMarkers = () => {
+    const markers: React.ReactElement[] = []
+    // Dynamic interval based on zoom level - more frequent labels
+    let interval = 1
+    let minorInterval = 0.5
+    
+    // Debug: Check if we have valid duration
+    if (!duration || duration <= 0) {
+      console.log('NLETimeline: No valid duration for full height markers', { duration })
+      return markers
+    }
+    // Calculate intervals based on zoom level and container width
     const containerWidth = timelineRef.current?.clientWidth || 1000
-    const pixelsPerSecond = isFinite(frameRate * frameWidth * zoom) && frameRate * frameWidth * zoom > 0 
-      ? frameRate * frameWidth * zoom 
-      : 1
+    const pixelsPerSecond = frameRate * frameWidth * zoom
+    const secondsPerPixel = 1 / pixelsPerSecond
+    
+    // Calculate appropriate intervals based on visible time range
+    const visibleDuration = containerWidth * secondsPerPixel
+    
+    if (visibleDuration > 3600) { interval = 600; minorInterval = 120 } // 10 min / 2 min for very zoomed out
+    else if (visibleDuration > 1800) { interval = 300; minorInterval = 60 } // 5 min / 1 min
+    else if (visibleDuration > 600) { interval = 120; minorInterval = 30 } // 2 min / 30 sec
+    else if (visibleDuration > 300) { interval = 60; minorInterval = 15 } // 1 min / 15 sec
+    else if (visibleDuration > 120) { interval = 30; minorInterval = 10 } // 30 sec / 10 sec
+    else if (visibleDuration > 60) { interval = 15; minorInterval = 5 } // 15 sec / 5 sec
+    else if (visibleDuration > 30) { interval = 10; minorInterval = 2 } // 10 sec / 2 sec
+    else if (visibleDuration > 10) { interval = 5; minorInterval = 1 } // 5 sec / 1 sec
+    else if (visibleDuration > 5) { interval = 2; minorInterval = 0.5 } // 2 sec / 0.5 sec
+    else if (visibleDuration > 1) { interval = 1; minorInterval = 0.25 } // 1 sec / 0.25 sec
+    else { interval = 0.5; minorInterval = 0.1 } // 0.5 sec / 0.1 sec
+    
+    // Calculate visible time range based on scroll position and zoom
+    const startTime = Math.max(0, scrollPosition / pixelsPerSecond)
+    const endTime = Math.min(duration, (scrollPosition + containerWidth) / pixelsPerSecond)
+    
+    // Round to interval boundaries
+    const roundedStartTime = Math.floor(startTime / minorInterval) * minorInterval
+    const roundedEndTime = Math.ceil(endTime / minorInterval) * minorInterval
+    
+    for (let time = roundedStartTime; time <= roundedEndTime; time += minorInterval) {
+      if (time >= 0 && time <= duration) {
+        const position = timeToPosition(time)
+        const isMajorMarker = Math.abs(time % interval) < minorInterval / 2 // Major markers at interval boundaries
+        const isMediumMarker = Math.abs(time % (interval / 2)) < minorInterval / 2 && !isMajorMarker
+        
+        markers.push(
+          <div
+            key={`full-${time}`}
+            className={`absolute ${
+              isMajorMarker ? 'w-px bg-gray-300' : 
+              isMediumMarker ? 'w-px bg-gray-500' : 
+              'w-px bg-gray-700'
+            }`}
+            style={{ 
+              left: position,
+              top: '-88px', // Start from top of ruler (8px padding + 32px ruler + 48px ribbon = 88px)
+              height: 'calc(100% + 88px)' // Extend through ruler, ribbon, and highlight section
+            }}
+          />
+        )
+      }
+    }
+    
+    return markers
+  }
+
+  const generateFrameMarkers = () => {
+    const markers: React.ReactElement[] = []
+    // Dynamic interval based on zoom level - more frequent labels
+    let interval = 1
+    let minorInterval = 0.5
+    
+    // Debug: Check if we have valid duration
+    if (!duration || duration <= 0) {
+      console.log('NLETimeline: No valid duration for markers', { duration })
+      return markers
+    }
+    // Calculate intervals based on zoom level and container width
+    const containerWidth = timelineRef.current?.clientWidth || 1000
+    const pixelsPerSecond = frameRate * frameWidth * zoom
+    const secondsPerPixel = 1 / pixelsPerSecond
+    
+    // Calculate appropriate intervals based on visible time range
+    const visibleDuration = containerWidth * secondsPerPixel
+    
+    if (visibleDuration > 3600) { interval = 600; minorInterval = 120 } // 10 min / 2 min for very zoomed out
+    else if (visibleDuration > 1800) { interval = 300; minorInterval = 60 } // 5 min / 1 min
+    else if (visibleDuration > 600) { interval = 120; minorInterval = 30 } // 2 min / 30 sec
+    else if (visibleDuration > 300) { interval = 60; minorInterval = 15 } // 1 min / 15 sec
+    else if (visibleDuration > 120) { interval = 30; minorInterval = 10 } // 30 sec / 10 sec
+    else if (visibleDuration > 60) { interval = 15; minorInterval = 5 } // 15 sec / 5 sec
+    else if (visibleDuration > 30) { interval = 10; minorInterval = 2 } // 10 sec / 2 sec
+    else if (visibleDuration > 10) { interval = 5; minorInterval = 1 } // 5 sec / 1 sec
+    else if (visibleDuration > 5) { interval = 2; minorInterval = 0.5 } // 2 sec / 0.5 sec
+    else if (visibleDuration > 1) { interval = 1; minorInterval = 0.25 } // 1 sec / 0.25 sec
+    else { interval = 0.5; minorInterval = 0.1 } // 0.5 sec / 0.1 sec
+    
+    // Calculate visible time range based on scroll position and zoom
     
     const startTime = Math.max(0, scrollPosition / pixelsPerSecond)
     const endTime = Math.min(duration, (scrollPosition + containerWidth) / pixelsPerSecond)
@@ -684,25 +838,47 @@ export default function NLETimeline({
         markers.push(
           <div
             key={time}
-            className={`absolute top-0 bottom-0 w-px ${
-              isMajorMarker ? 'bg-gray-200' : 
-              isMediumMarker ? 'bg-gray-400' : 
-              'bg-gray-600'
+            className={`absolute ${
+              isMajorMarker ? 'w-px bg-gray-300' : 
+              isMediumMarker ? 'w-px bg-gray-500' : 
+              'w-px bg-gray-700'
             }`}
-            style={{ left: position }}
+            style={{ 
+              left: position,
+              top: '-88px', // Start from top of ruler (8px padding + 32px ruler + 48px ribbon = 88px)
+              height: 'calc(100% + 88px)' // Extend through ruler and ribbon
+            }}
           >
-            {/* Show timecode labels for major and medium markers */}
-            {(isMajorMarker || isMediumMarker) && (
-              <div className={`absolute -top-6 text-xs whitespace-nowrap font-mono px-1 rounded ${
-                isMajorMarker ? 'text-white bg-gray-700' : 'text-gray-300 bg-gray-800'
-              }`}>
-                {formatTimecode(time)}
+            {/* Show timecode labels for major markers only - DEBUG VERSION */}
+            {isMajorMarker && (
+              <div className="absolute text-sm whitespace-nowrap font-mono px-2 py-1 rounded z-50 text-white bg-red-600 border-2 border-yellow-400" 
+                   style={{ 
+                     fontSize: '14px', 
+                     fontWeight: 'bold',
+                     top: '0px', // Position at the very top of the ruler section
+                     left: '-20px' // Offset to center on marker
+                   }}>
+                DEBUG: {formatTimecode(time)}
               </div>
             )}
           </div>
         )
       }
     }
+    
+    console.log('NLETimeline: Generated markers', {
+      markerCount: markers.length,
+      duration,
+      zoom,
+      interval,
+      minorInterval,
+      visibleDuration,
+      containerWidth,
+      roundedStartTime,
+      roundedEndTime,
+      firstMarker: markers[0] ? 'exists' : 'none'
+    })
+    
     return markers
   }
 
@@ -919,7 +1095,14 @@ export default function NLETimeline({
       </div>
 
       {/* Timeline Container */}
-      <div className="relative bg-gray-800 rounded-lg overflow-hidden">
+      <div className="relative bg-gray-800 rounded-lg overflow-visible pt-8">
+        {/* Time Ruler */}
+        <div className="h-8 bg-gray-900 border-b border-gray-600 relative overflow-hidden">
+          <div className="absolute inset-0">
+            {generateRulerMarkers()}
+          </div>
+        </div>
+        
         {/* Frame Preview Ribbon */}
         <div 
           className="h-12 bg-gray-700 border-b border-gray-600 relative overflow-hidden"
@@ -982,7 +1165,7 @@ export default function NLETimeline({
         {/* Main Timeline */}
         <div
           ref={timelineRef}
-          className="relative h-16 bg-gray-800 cursor-pointer overflow-x-auto"
+          className="relative h-20 bg-gray-800 cursor-pointer overflow-x-auto overflow-y-visible"
           onMouseDown={handleTimelineClick}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -990,9 +1173,9 @@ export default function NLETimeline({
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           <div className="relative" style={{ width: totalWidth, height: '100%' }}>
-            {/* Frame Markers */}
-            {generateFrameMarkers()}
-
+            {/* Time Markers - Full Height extending through all sections */}
+            {generateFullHeightMarkers()}
+            
             {/* Playhead */}
             <div
               className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20"

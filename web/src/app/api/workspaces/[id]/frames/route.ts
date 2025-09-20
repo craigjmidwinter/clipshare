@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import path from "path"
 import { promises as fs } from "fs"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { searchParams } = new URL(request.url)
     const secondParam = searchParams.get("second")
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const second = Math.max(0, parseInt(secondParam, 10) || 0)
-    const workspaceId = params.id
+    const { id: workspaceId } = await params
     const framesDir = path.join(process.cwd(), 'processed-files', workspaceId, 'frames')
     
     // Try shot-aware frames first

@@ -1214,7 +1214,7 @@ export default function WorkspaceDetailPage() {
 
             {/* NLE Timeline - Outside Video Player */}
             <div className="lg:col-span-2">
-              <div className="bg-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-hidden">
+              <div className="bg-gray-900 rounded-lg shadow-sm border border-gray-700 overflow-visible">
                 <NLETimeline
                   key={selectedVideo ?? 'workspace-main'}
                   duration={displayedDurationMs / 1000} // Convert ms to seconds
